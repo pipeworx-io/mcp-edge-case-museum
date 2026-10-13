@@ -1,0 +1,62 @@
+{
+  "id": "windows-backslash-traversal-ntpath",
+  "title": "A traversal filter that only blocks \"../\" misses \"..\\\\\" — and you can test the miss without touching Windows",
+  "category": "filenames",
+  "assumption": "Checking a filename for the substring \"../\" catches every directory-traversal attempt.",
+  "input": {
+    "display": "\"..\\\\..\\\\windows\\\\system32\" (backslash-separated traversal)",
+    "description": "A filename accepted by a web form where the server later resolves the path on Windows, or a ZIP/tar entry name that uses backslashes."
+  },
+  "what_goes_wrong": "A blocklist written against the forward-slash form lets the backslash form straight through, and ntpath/path.win32 — which treat backslash as the canonical separator — walk back out of the intended directory exactly as the forward-slash form would.",
+  "why": "ntpath and path.win32 are pure-path implementations of Windows' own path rules, where backslash is the primary separator even though forward slash also works. A traversal check written only against the string \"../\" is really checking for a POSIX idiom and has nothing to say about \"..\\\\\", so on any code path that eventually resolves the string as a Windows path, the backslash form reaches the same `..` component and climbs out of the base directory just the same.",
+  "affects": [
+    "windows path resolution (backslash is the canonical separator)",
+    "ntpath (runs on any host, not just windows)",
+    "path.win32 (runs on any host, not just windows)"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "import ntpath\nraw = \"..\\\\..\\\\windows\\\\system32\"\nprint(\"contains ../ :\", \"../\" in raw)\njoined = ntpath.join(\"C:\\\\srv\\\\uploads\", raw)\nprint(\"joined:\", joined)\nprint(\"normalized:\", ntpath.normpath(joined))\n",
+      "expected_output": "contains ../ : False\njoined: C:\\srv\\uploads\\..\\..\\windows\\system32\nnormalized: C:\\windows\\system32",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "import path from 'node:path';\nconst raw = \"..\\\\..\\\\windows\\\\system32\";\nconsole.log(\"contains ../ :\", raw.includes(\"../\"));\nconst joined = path.win32.join(\"C:\\\\srv\\\\uploads\", raw);\nconsole.log(\"joined:\", joined);\n",
+      "expected_output": "contains ../ : false\njoined: C:\\windows\\system32",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Normalize with the platform-appropriate path module and compare the RESULT against the resolved base directory; never pattern-match the raw string for one separator style.",
+  "related": [
+    "path-join-escapes-the-base-directory"
+  ],
+  "sources": [
+    {
+      "title": "Python docs: os.path (ntpath on Windows)",
+      "url": "https://docs.python.org/3/library/os.path.html"
+    },
+    {
+      "title": "Node.js docs: path.win32",
+      "url": "https://nodejs.org/api/path.html#pathwin32"
+    }
+  ],
+  "tags": [
+    "filename",
+    "path",
+    "security",
+    "validation",
+    "upload"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "C:\\srv\\uploads",
+        "..\\..\\windows\\system32"
+      ],
+      "relation": "no_crash",
+      "note": "A traversal filter tested only against forward slashes should also be tested against this backslash form before you trust it."
+    }
+  ]
+}

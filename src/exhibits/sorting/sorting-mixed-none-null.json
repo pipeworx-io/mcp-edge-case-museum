@@ -1,0 +1,56 @@
+{
+  "id": "sorting-mixed-none-null",
+  "title": "Python refuses to sort a list with a missing value; JavaScript sorts it two different ways depending on how you ask",
+  "category": "sorting",
+  "assumption": "A missing value (None/null/undefined) in a list of numbers sorts to a predictable, consistent place, or fails loudly the same way everywhere.",
+  "input": {
+    "display": "[3, None, 1] in Python; [3, null, 1, undefined, 2] in JavaScript",
+    "description": "A numeric column from a database or API response where some rows legitimately have no value (an unset score, an optional field), sorted for a leaderboard or table."
+  },
+  "what_goes_wrong": "Python's sorted([3, None, 1]) raises TypeError. JavaScript's default sort compares elements as strings, so null sorts where the string \"null\" would (after the digits here), while undefined always goes to the very end. With a numeric comparator (a, b) => a - b, null behaves as 0 (Number(null) === 0) and moves to the front, and undefined is still last: the comparator is never called with undefined, so no comparator logic can move it.",
+  "why": "Python's < raises TypeError when neither operand's comparison method supports the other type, and None has no ordering against int. In JavaScript, the default sort uses ToString (String(null) is \"null\"), while a subtraction comparator relies on numeric conversion, where Number(null) is 0. undefined never reaches the comparator: the spec's CompareArrayElements returns \"undefined goes after\" before calling it, so undefined values always end up after every other value (and array holes after those).",
+  "affects": [
+    "python",
+    "javascript"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "data = [3, None, 1]\ntry:\n    sorted(data)\n    print(\"sorted without error\")\nexcept TypeError:\n    print(\"TypeError\")\n",
+      "expected_output": "TypeError",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "const data = [3, null, 1, undefined, 2];\nconsole.log(data.slice().sort());\nconsole.log(data.slice().sort((a, b) => a - b));\n",
+      "expected_output": "[ 1, 2, 3, null, undefined ]\n[ null, 1, 2, 3, undefined ]",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Decide explicitly where missing values belong (first, last, or filtered out) and partition or key for that before sorting, rather than letting None/null/undefined flow into the comparison — in JavaScript especially, don't assume your comparator controls where undefined ends up; it doesn't.",
+  "related": [
+    "python-cannot-compare-str-int",
+    "nan-in-sort"
+  ],
+  "sources": [
+    {
+      "title": "ECMAScript spec: CompareArrayElements",
+      "url": "https://tc39.es/ecma262/#sec-comparearrayelements"
+    },
+    {
+      "title": "ECMAScript spec: Array.prototype.sort",
+      "url": "https://tc39.es/ecma262/#sec-array.prototype.sort"
+    },
+    {
+      "title": "Python docs: Comparisons",
+      "url": "https://docs.python.org/3/reference/expressions.html#comparisons"
+    }
+  ],
+  "tags": [
+    "sorting",
+    "comparison",
+    "database",
+    "pagination",
+    "display"
+  ]
+}

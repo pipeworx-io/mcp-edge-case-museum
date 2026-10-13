@@ -1,0 +1,64 @@
+{
+  "id": "js-word-regex-ascii-only",
+  "title": "The same regex \\w+ accepts \"café\" in Python and rejects it in JavaScript",
+  "category": "unicode",
+  "assumption": "\\w in a regex means \"letters\", in whichever language you're running it, maybe with an extra flag for Unicode.",
+  "input": {
+    "display": "/^\\w+$/ applied to \"caf\\u00e9\" and to \"\\u65e5\\u672c\\u8a9e\" (Japanese for \"Japanese language\")",
+    "description": "A \"letters and numbers only\" validator applied to a name field, reused as-is between a Python backend and a JavaScript frontend."
+  },
+  "what_goes_wrong": "Python's re.fullmatch(r\"\\w+\", \"caf\\u00e9\") matches, and even matches \"\\u65e5\\u672c\\u8a9e\". The textually identical /^\\w+$/ in JavaScript rejects both — and adding the /u (Unicode) flag, which people reach for specifically to fix Unicode regex problems, does not change the result at all.",
+  "why": "In JavaScript, \\w is defined by the ECMAScript spec as the ASCII class [A-Za-z0-9_]. The u flag does not turn it into a Unicode letter class; the only change is that with both u and i set it also matches U+017F (long s) and U+212A (Kelvin sign), because they case-fold to s and k. To match non-ASCII letters in JavaScript you need a Unicode property escape such as \\p{L}, which requires the u (or v) flag. Python's re module makes \\w Unicode-aware by default for str patterns (letters, digits and underscore in the Unicode sense) unless you pass re.ASCII. Same regex syntax, opposite default behaviour.",
+  "affects": [
+    "python",
+    "javascript"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "import re\nprint(bool(re.fullmatch(r\"\\w+\", \"caf\\u00e9\")))\nprint(bool(re.fullmatch(r\"\\w+\", \"\\u65e5\\u672c\\u8a9e\")))\nprint(bool(re.fullmatch(r\"\\w+\", \"caf\\u00e9\", re.ASCII)))\n",
+      "expected_output": "True\nTrue\nFalse",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "const name = \"caf\\u00e9\";\nconsole.log(/^\\w+$/.test(name), /^\\w+$/u.test(name));\nconsole.log(/^[\\p{L}]+$/u.test(name));\nconst name2 = \"\\u65e5\\u672c\\u8a9e\";\nconsole.log(/^\\w+$/.test(name2), /^[\\p{L}]+$/u.test(name2));\n",
+      "expected_output": "false false\ntrue\nfalse true",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Never port a \\w-based regex between Python and JavaScript expecting matching behavior. In JavaScript, use /^[\\p{L}\\p{N}_]+$/u for a Unicode-aware \"word characters\" check; in Python, pass re.ASCII explicitly if you actually want \\w restricted to [A-Za-z0-9_].",
+  "related": [
+    "arabic-indic-digit-parses"
+  ],
+  "sources": [
+    {
+      "title": "ECMA-262: RegExp \\w class definition (CharacterClassEscape)",
+      "url": "https://tc39.es/ecma262/#sec-characterclassescape"
+    },
+    {
+      "title": "MDN: Unicode property escapes",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Regular_expressions/Unicode_character_class_escape"
+    },
+    {
+      "title": "Python docs: re module, \\w and re.ASCII",
+      "url": "https://docs.python.org/3/library/re.html#re.ASCII"
+    }
+  ],
+  "tags": [
+    "validation",
+    "forms",
+    "parsing",
+    "names",
+    "i18n"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "café"
+      ],
+      "relation": "no_crash",
+      "note": "A \"letters and numbers only\" validator ported between a Python backend and a JS frontend must not accept this on one side and reject it on the other."
+    }
+  ]
+}

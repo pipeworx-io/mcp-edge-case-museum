@@ -1,0 +1,70 @@
+{
+  "id": "python-cannot-compare-str-int",
+  "title": "Python crashes sorting [2, \"10\", 1]; JavaScript quietly reshuffles it",
+  "category": "sorting",
+  "assumption": "A list with mixed number and numeric-string types is a data-cleanliness smell, not something that changes which language's sort crashes versus which one silently gives you a wrong-looking answer.",
+  "input": {
+    "display": "[2, \"10\", 1, \"3\"] — a list mixing actual numbers and numbers-as-strings",
+    "description": "A column assembled from two sources that disagree on type — one API returns numeric IDs as JSON numbers, another returns them as strings — merged into one list and sorted without normalizing types first."
+  },
+  "what_goes_wrong": "Python's sorted([2, \"10\", 1, \"3\"]) raises TypeError: Python 3 has no ordering between int and str. JavaScript's [2, \"10\", 1, \"3\"].sort() runs with no error and returns [1, \"10\", 2, \"3\"], an order that is neither numeric nor meaningful, produced silently.",
+  "why": "For a < b, Python first tries a.__lt__(b) and, if that returns NotImplemented, the reflected b.__gt__(a). int.__lt__ does not accept a str and str.__gt__ does not accept an int, so both return NotImplemented and Python raises TypeError rather than guess. (Python 2 did order mixed types, by type name; Python 3 removed that.) JavaScript's default Array.prototype.sort() converts every element with ToString before comparing, so 2 becomes \"2\" and the comparison is ordinary string comparison. By the time anything is compared there is no type mismatch left to object to.",
+  "affects": [
+    "python",
+    "javascript"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "data = [2, \"10\", 1, \"3\"]\ntry:\n    sorted(data)\n    print(\"no error\")\nexcept TypeError:\n    print(\"TypeError\")\n",
+      "expected_output": "TypeError",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "const data = [2, \"10\", 1, \"3\"];\nconsole.log(data.slice().sort());\n",
+      "expected_output": "[ 1, '10', 2, '3' ]",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Normalize types before sorting a mixed collection — decide whether everything should be a number or everything a string, and convert explicitly, rather than relying on either language's comparison machinery to make that decision for you (one will refuse to run at all; the other will run and hand you an answer that looks plausible while meaning nothing).",
+  "related": [
+    "sorting-mixed-none-null",
+    "js-array-sort-stringifies-numbers"
+  ],
+  "sources": [
+    {
+      "title": "Python docs: Comparisons",
+      "url": "https://docs.python.org/3/reference/expressions.html#comparisons"
+    },
+    {
+      "title": "Python docs: object.__lt__ and reflected comparison methods",
+      "url": "https://docs.python.org/3/reference/datamodel.html#object.__lt__"
+    },
+    {
+      "title": "ECMAScript spec: Array.prototype.sort",
+      "url": "https://tc39.es/ecma262/#sec-array.prototype.sort"
+    }
+  ],
+  "tags": [
+    "sorting",
+    "comparison",
+    "database",
+    "json",
+    "parsing"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        [
+          2,
+          "10",
+          1,
+          "3"
+        ]
+      ],
+      "relation": "no_crash",
+      "note": "A sort over mixed-type input should normalize types first (for example convert everything to int, giving 1, 2, 3, 10 in numeric order) rather than raise TypeError (Python's sorted) or silently return string order (JavaScript's default sort)."
+    }
+  ]
+}

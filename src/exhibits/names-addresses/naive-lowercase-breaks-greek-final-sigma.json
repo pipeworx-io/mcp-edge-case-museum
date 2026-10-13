@@ -1,0 +1,64 @@
+{
+  "id": "naive-lowercase-breaks-greek-final-sigma",
+  "title": "Build your own per-letter lowercase table and Greek \"ΟΔΥΣΣΕΥΣ\" lowercases to the wrong letter at the end",
+  "category": "names-addresses",
+  "assumption": "Lowercasing a string is just mapping each character to its lowercase equivalent, independent of its neighbors.",
+  "input": {
+    "display": "\"ΟΔΥΣΣΕΥΣ\" (Greek, 'ODYSSEUS')",
+    "description": "A hand-rolled case-folding table (common in custom search normalizers, or a simple transliteration helper) that maps each character independently, rather than calling the language's real lowercasing routine."
+  },
+  "what_goes_wrong": "A search-index normalizer built this way produces a lowercase form that disagrees with the one str.lower() / toLowerCase() produces, so a lookup built against one and compared against the other silently fails to match at the end of every Greek word ending in capital sigma.",
+  "why": "Greek has two lowercase forms of sigma: σ in the middle of a word and ς (final sigma) at the end of a word — which form is correct depends on the character's POSITION in the word, not just its identity. Unicode's SpecialCasing rules encode that context-sensitive mapping, and both Python's str.lower() and JavaScript's toLowerCase() correctly apply it. A naive table that maps Σ to σ unconditionally, character by character with no notion of 'end of word', can never produce the final form, so it disagrees with the correct, built-in result precisely where a word ends in sigma.",
+  "affects": [
+    "any hand-rolled per-character case table (no word-context)",
+    "python str.lower (correctly context-sensitive)",
+    "javascript toLowerCase (correctly context-sensitive)"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "naive_map = {\"\\u03a3\": \"\\u03c3\"}\ndef naive_lower(s):\n    return \"\".join(naive_map.get(c, c.lower()) for c in s)\n\nword = \"\\u039f\\u0394\\u03a5\\u03a3\\u03a3\\u0395\\u03a5\\u03a3\"\nprint(naive_lower(word) == word.lower())\nprint(naive_lower(word))\nprint(word.lower())\n",
+      "expected_output": "False\nοδυσσευσ\nοδυσσευς",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "const naiveMap = { \"\\u03a3\": \"\\u03c3\" };\nfunction naiveLower(s) {\n  return [...s].map((c) => naiveMap[c] ?? c.toLowerCase()).join(\"\");\n}\nconst word = \"\\u039f\\u0394\\u03a5\\u03a3\\u03a3\\u0395\\u03a5\\u03a3\";\nconsole.log(naiveLower(word) === word.toLowerCase());\nconsole.log(naiveLower(word));\nconsole.log(word.toLowerCase());\n",
+      "expected_output": "false\nοδυσσευσ\nοδυσσευς",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Never build a custom per-character case-folding table for a script you haven't checked for context-sensitive rules; use the language's built-in Unicode-aware lower()/toLowerCase() (or ICU) and only post-process it if you have a specific, tested reason to.",
+  "related": [],
+  "sources": [
+    {
+      "title": "Unicode SpecialCasing.txt (Final_Sigma condition)",
+      "url": "https://www.unicode.org/Public/UCD/latest/ucd/SpecialCasing.txt"
+    },
+    {
+      "title": "Python docs: str.lower()",
+      "url": "https://docs.python.org/3/library/stdtypes.html#str.lower"
+    },
+    {
+      "title": "ECMAScript spec: String.prototype.toLowerCase",
+      "url": "https://tc39.es/ecma262/#sec-string.prototype.tolowercase"
+    }
+  ],
+  "tags": [
+    "names",
+    "i18n",
+    "normalization",
+    "search",
+    "database"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "ΟΔΥΣΣΕΥΣ"
+      ],
+      "relation": "returns",
+      "expected": "οδυσσευς",
+      "note": "If you built your own per-character lowercase table, verify it against this: the correct result ends in final sigma (ς), not plain sigma (σ)."
+    }
+  ]
+}

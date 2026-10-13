@@ -1,0 +1,48 @@
+{
+  "id": "python-int-accepts-underscores-and-whitespace",
+  "title": "int(\" 42 \") and int(\"1_000\") both just work",
+  "category": "integers",
+  "assumption": "int() only accepts exactly what you could type as an integer literal in source code, with nothing extra around it.",
+  "input": {
+    "display": "int(\" 42 \") == 42;  int(\"1_000\") == 1000",
+    "description": "Converting a number pulled from a config file, environment variable, or user-pasted value that has incidental surrounding whitespace, or a number formatted with underscore thousands-separators (a format Python itself started allowing in source literals in 3.6)."
+  },
+  "what_goes_wrong": "A validation routine that assumes `int()` will reject anything that isn't a bare run of digits lets through both leading/trailing whitespace and underscore-separated digit groups, silently accepting input shapes the developer never intended to allow.",
+  "why": "`int()`'s string-to-integer conversion strips leading and trailing whitespace before parsing, by design, and that means any Unicode whitespace (tabs, newlines, U+3000 IDEOGRAPHIC SPACE), not just spaces. Separately, since Python 3.6 (PEP 515), the integer literal grammar allows a single underscore between digits as a visual separator (`1_000`), and `int()`'s string parsing follows that same grammar, so it accepts underscore-separated digit strings too -- as long as the underscores are singly placed between digits, not leading, trailing, or doubled.",
+  "affects": [
+    "python"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "print(int(\" 42 \"))\nprint(int(\"1_000\"))\ntry:\n    int(\"_1000\")\nexcept ValueError as e:\n    print(\"leading underscore rejected:\", e)\n",
+      "expected_output": "42\n1000\nleading underscore rejected: invalid literal for int() with base 10: '_1000'",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "// Number() also trims surrounding whitespace. JavaScript's numeric separators\n// (1_000, ES2021, the same single-underscore-between-digits rule as Python)\n// exist only in source-code literals, never in string parsing.\nconsole.log(Number(\" 42 \"));       // 42: whitespace is trimmed here too\nconsole.log(Number(\"1_000\"));      // NaN: Number() does not accept separators in strings\nconsole.log(parseInt(\"1_000\"));    // 1: parseInt stops at the underscore\nconsole.log(1_000);                // 1000: but the literal is fine",
+      "expected_output": "42\nNaN\n1\n1000",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Don't assume `int()` validates format as strictly as a literal; if you need to reject whitespace or separators, check the string's shape explicitly (e.g. a regex) before calling `int()`.",
+  "related": [
+    "python-int-accepts-fullwidth-unicode-digits"
+  ],
+  "sources": [
+    {
+      "title": "Python docs: int() constructor",
+      "url": "https://docs.python.org/3/library/functions.html#int"
+    },
+    {
+      "title": "PEP 515 -- Underscores in Numeric Literals",
+      "url": "https://peps.python.org/pep-0515/"
+    }
+  ],
+  "tags": [
+    "parsing",
+    "validation"
+  ],
+  "test_cases": []
+}

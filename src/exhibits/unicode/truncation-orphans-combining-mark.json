@@ -1,0 +1,62 @@
+{
+  "id": "truncation-orphans-combining-mark",
+  "title": "\"Take the last character of the name\" for an avatar initial can return a bare accent mark",
+  "category": "unicode",
+  "assumption": "The last character of a person's name is always a letter you can use as an initial.",
+  "input": {
+    "display": "\"Jose\\u0301\" (decomposed \\u00e9: \"e\" + COMBINING ACUTE ACCENT, 5 code points) and name[-1] / name.slice(-1)",
+    "description": "Generating a one-letter avatar/initial from a user's display name by taking its first or last character, where the name arrived in decomposed (NFD) form from a different system or keyboard."
+  },
+  "what_goes_wrong": "name[-1] (Python) and name.slice(-1) (JavaScript) both return a single COMBINING ACUTE ACCENT by itself — not the letter \"e\" or the letter \"\\u00e9\" a person would expect — because in a decomposed string the accent is its own trailing code point. The result is not even classified as a letter.",
+  "why": "Unicode represents an accented letter either as one precomposed code point (U+00E9) or as a base letter followed by a separate combining mark (U+0065 U+0301). A combining mark always comes AFTER the base character it modifies, so taking the last code point (Python) or code unit (JavaScript) of a decomposed string can return the mark alone. That isolated mark has General Category Mn (\"Mark, nonspacing\"), not a letter category, which is why isalpha() and \\p{L} both reject it. Shown on its own it has no base to attach to; depending on the renderer it appears floating over nothing, over a dotted-circle placeholder, or attached to whatever text precedes it.",
+  "affects": [
+    "python",
+    "javascript"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "import unicodedata\nname = \"Jose\\u0301\"\ninitial = name[-1]\nprint(name, len(name))\nprint(repr(initial), initial.isalpha(), unicodedata.category(initial))\n",
+      "expected_output": "José 5\n'́' False Mn",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "const name = \"Jose\\u0301\";\nconst initial = name.slice(-1);\nconsole.log(name, name.length);\nconsole.log(JSON.stringify(initial), /\\p{L}/u.test(initial));\n",
+      "expected_output": "José 5\n\"́\" false",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Normalize to NFC before taking a single character for display (so the accent recombines into one code point with its base), or better, take the first/last grapheme cluster (Intl.Segmenter in JS) rather than the first/last code point/code unit.",
+  "related": [
+    "grapheme-vs-codepoint-length",
+    "nfc-nfd-same-name-two-accounts",
+    "truncation-splits-surrogate-pair"
+  ],
+  "sources": [
+    {
+      "title": "Unicode Standard Annex #15: Unicode Normalization Forms",
+      "url": "https://www.unicode.org/reports/tr15/"
+    },
+    {
+      "title": "Unicode Technical Report #44: General Category values (Mn)",
+      "url": "https://www.unicode.org/reports/tr44/#General_Category_Values"
+    }
+  ],
+  "tags": [
+    "names",
+    "display",
+    "truncation",
+    "normalization",
+    "i18n"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "José"
+      ],
+      "relation": "no_crash",
+      "note": "An avatar-initial function should not return an isolated combining mark for this (valid, real-world) decomposed name."
+    }
+  ]
+}

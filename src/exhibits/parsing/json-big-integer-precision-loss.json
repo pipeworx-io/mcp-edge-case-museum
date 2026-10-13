@@ -1,0 +1,65 @@
+{
+  "id": "json-big-integer-precision-loss",
+  "title": "JSON.parse silently changes a 17-digit integer ID to a different number",
+  "category": "parsing",
+  "assumption": "Parsing a JSON number that looks like an integer gives back that exact integer, as long as the JSON text itself is well-formed.",
+  "input": {
+    "display": "{\"id\": 9007199254740993}",
+    "description": "A large numeric ID - a Snowflake-style ID, a 64-bit database primary key, a big serial number - serialized as a JSON number (not a string) by a backend and consumed by a JavaScript client."
+  },
+  "what_goes_wrong": "`JSON.parse('{\"id\": 9007199254740993}').id` returns `9007199254740992` - one less than the actual ID - and re-serializing it with `JSON.stringify` writes back the wrong, rounded value. Python's `json.loads` on the identical text keeps the exact integer.",
+  "why": "JavaScript's JSON implementation stores every number as the same IEEE-754 double that all JS Numbers use, and doubles can only represent integers exactly up to 2**53 (9,007,199,254,740,992); 9007199254740993 is one past that boundary and rounds to the nearest representable double, which happens to be the even number below it. Python's `json` module parses an integer-looking JSON number into a native arbitrary-precision `int`, which has no such ceiling, so it round-trips exactly.",
+  "affects": [
+    "javascript"
+  ],
+  "repros": [
+    {
+      "language": "javascript",
+      "code": "const o = JSON.parse('{\"id\": 9007199254740993}');\nconsole.log(o.id);\nconsole.log(o.id === 9007199254740993);\nconsole.log(JSON.stringify(o));\n",
+      "expected_output": "9007199254740992\ntrue\n{\"id\":9007199254740992}",
+      "verified_with": "Node.js v22.22.2"
+    },
+    {
+      "language": "python",
+      "code": "import json\no = json.loads('{\"id\": 9007199254740993}')\nprint(o[\"id\"])\nprint(o[\"id\"] == 9007199254740993)\n",
+      "expected_output": "9007199254740993\nTrue",
+      "verified_with": "Python 3.14.2"
+    }
+  ],
+  "fix": "Serialize any integer that might exceed 2**53 as a JSON string, not a JSON number, and parse it on the JS side with `BigInt(str)` rather than `JSON.parse`'s default Number conversion. Many JSON APIs for 64-bit IDs (e.g. Twitter/X's `id_str`) already do this for exactly this reason.",
+  "related": [
+    "max-safe-integer-plus-two"
+  ],
+  "sources": [
+    {
+      "title": "MDN: Number.MAX_SAFE_INTEGER",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/MAX_SAFE_INTEGER"
+    },
+    {
+      "title": "MDN: JSON.parse()",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON/parse"
+    },
+    {
+      "title": "Python docs: json - JSON encoder and decoder",
+      "url": "https://docs.python.org/3/library/json.html"
+    }
+  ],
+  "tags": [
+    "json",
+    "parsing",
+    "id",
+    "validation"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "{\"id\": 9007199254740993}"
+      ],
+      "relation": "returns",
+      "expected": {
+        "id": 9007199254740993
+      },
+      "note": "their_parse(json_text) must preserve this exact integer id - if it goes through JS's Number type anywhere in the pipeline, it will silently become 9007199254740992."
+    }
+  ]
+}

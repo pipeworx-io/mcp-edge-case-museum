@@ -1,0 +1,55 @@
+{
+  "id": "ascii-regex-rejects-accented-and-hyphenated-names",
+  "title": "[A-Za-z ]+ rejects \"Anne-Marie\", \"O'Brien\", and anyone with an accent in their name",
+  "category": "names-addresses",
+  "assumption": "A simple letters-and-spaces regex is a reasonable baseline check for 'is this a real name'.",
+  "input": {
+    "display": "\"Zo\\u00eb Navarro-Pe\\u00f1a\" (invented), \"Anne-Marie\", \"O'Brien\"",
+    "description": "A 'name must contain only letters' validator on a signup or checkout form, written against the ASCII alphabet."
+  },
+  "what_goes_wrong": "Entirely ordinary names are rejected outright: an accented letter, a hyphen joining two given names, or an apostrophe in a surname all fail a check that was only ever tested against plain ASCII names.",
+  "why": "The character class [A-Za-z] matches only the 26 unaccented Latin letters in each case; it has no entries for accented Latin letters, hyphens, apostrophes, or any non-Latin script at all. Any name that uses punctuation that is a normal part of that name, or any letter outside the ASCII range, fails the match even though the input is a perfectly ordinary name.",
+  "affects": [
+    "any regex validator built on [A-Za-z] or similar ascii-only classes"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "import re\npattern = re.compile(r\"^[A-Za-z ]+$\")\nfor name in [\"Zo\\u00eb Navarro-Pe\\u00f1a\", \"Anne-Marie\", \"O'Brien\", \"Jose Luis\"]:\n    print(name, bool(pattern.match(name)))\n",
+      "expected_output": "Zoë Navarro-Peña False\nAnne-Marie False\nO'Brien False\nJose Luis True",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "const pattern = /^[A-Za-z ]+$/;\nfor (const name of [\"Zo\\u00eb Navarro-Pe\\u00f1a\", \"Anne-Marie\", \"O'Brien\", \"Jose Luis\"]) {\n  console.log(name, pattern.test(name));\n}\n",
+      "expected_output": "Zoë Navarro-Peña false\nAnne-Marie false\nO'Brien false\nJose Luis true",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Don't validate names against a character allowlist at all if you can avoid it; if you must reject something, reject on length or control characters, not on script or punctuation — a name field should accept Unicode letters, marks, hyphens, and apostrophes at minimum.",
+  "related": [
+    "title-case-mangles-mixed-case-and-apostrophes"
+  ],
+  "sources": [
+    {
+      "title": "Patrick McKenzie: Falsehoods Programmers Believe About Names",
+      "url": "https://www.kalzumeus.com/2010/06/17/falsehoods-programmers-believe-about-names/"
+    }
+  ],
+  "tags": [
+    "names",
+    "validation",
+    "forms",
+    "signup",
+    "i18n"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "Zoë Navarro-Peña"
+      ],
+      "relation": "no_crash",
+      "note": "Your name validator should accept this; if it's built on an ASCII letter class, it won't."
+    }
+  ]
+}

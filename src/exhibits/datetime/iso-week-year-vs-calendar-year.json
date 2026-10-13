@@ -1,0 +1,48 @@
+{
+  "id": "iso-week-year-vs-calendar-year",
+  "title": "December 30, 2024 is in ISO week 1 of 2025, not week 52 of 2024",
+  "category": "datetime",
+  "assumption": "The 'year' a date belongs to for week-numbering purposes is just its calendar year.",
+  "input": {
+    "display": "date(2024, 12, 30).isocalendar() == (2025, 1, 1)  -- ISO week-year 2025, week 1, weekday Monday",
+    "description": "Any report, invoice numbering, or analytics bucketing that labels data by 'year-week' (e.g. '2024-W52') using the calendar year instead of the ISO week-year."
+  },
+  "what_goes_wrong": "A 'weekly report for year X, week Y' system that pairs the calendar year with the ISO week number produces a nonsensical or wrong label like '2024-W01' for a date that is actually in the first ISO week of 2025, or silently double-counts/skips a week at the year boundary.",
+  "why": "ISO 8601 defines week 1 of a year as the week containing that year's first Thursday (equivalently, the week containing January 4th), and weeks run Monday-Sunday. Because of this rule, the last few days of December can fall into week 1 of the FOLLOWING year (as with 2024-12-30, a Monday, which starts the week containing 2025-01-02, a Thursday), and conversely the first few days of January can belong to the last week of the PREVIOUS year. The ISO week-year (`%G` in strftime, `isocalendar()[0]` in Python) is therefore a distinct value from the plain calendar year (`%Y`), and the two disagree exactly in this boundary zone.",
+  "affects": [
+    "python",
+    "javascript"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "from datetime import date\n\nd = date(2024, 12, 30)\nprint(\"calendar year:\", d.year)\nprint(\"isocalendar:\", d.isocalendar())\nprint(d.strftime(\"%G-W%V\"), \"vs plain %Y:\", d.strftime(\"%Y\"))\n",
+      "expected_output": "calendar year: 2024\nisocalendar: datetime.IsoCalendarDate(year=2025, week=1, weekday=1)\n2025-W01 vs plain %Y: 2024",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "// JavaScript has no built-in ISO week function; this is the standard\n// ISO 8601 algorithm (Thursday of the week decides the week-year).\nfunction isoWeekInfo(y, m, day) {\n  const d = new Date(Date.UTC(y, m, day));\n  const dayNum = (d.getUTCDay() + 6) % 7; // Monday=0..Sunday=6\n  d.setUTCDate(d.getUTCDate() - dayNum + 3); // Thursday of this week\n  const isoYear = d.getUTCFullYear();\n  const jan4 = new Date(Date.UTC(isoYear, 0, 4));\n  const week = 1 + Math.round(((d - jan4) / 86400000 - 3 + ((jan4.getUTCDay() + 6) % 7)) / 7);\n  return { isoYear, week };\n}\nconsole.log('calendar year:', 2024, '| ISO:', isoWeekInfo(2024, 11, 30));\n",
+      "expected_output": "calendar year: 2024 | ISO: { isoYear: 2025, week: 1 }",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Always use the ISO week-year (`%G`), never the plain calendar year (`%Y`), when labeling data with an ISO week number (`%V`); most date libraries expose both separately specifically because they can diverge.",
+  "related": [],
+  "sources": [
+    {
+      "title": "ISO 8601 week date (Wikipedia overview, verify against ISO 8601:2004)",
+      "url": "https://en.wikipedia.org/wiki/ISO_week_date"
+    },
+    {
+      "title": "Python docs: strftime %G/%V format codes",
+      "url": "https://docs.python.org/3/library/datetime.html#strftime-and-strptime-format-codes"
+    }
+  ],
+  "tags": [
+    "date parsing",
+    "database",
+    "validation"
+  ],
+  "test_cases": []
+}

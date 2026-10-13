@@ -1,0 +1,60 @@
+{
+  "id": "url-userinfo-trusted-looking-host",
+  "title": "\"http://trusted.com@evil.com/\" goes to evil.com, not trusted.com - and both languages' real parsers already know that",
+  "category": "parsing",
+  "assumption": "A URL string that starts with (or contains) \"trusted.com\" points at trusted.com.",
+  "input": {
+    "display": "http://trusted.com@evil.com/",
+    "description": "A link in a phishing email, a redirect parameter, or a webhook target URL that a naive check validates by looking for a trusted domain name somewhere in the string - `url.startsWith(\"http://trusted.com\")` or a regex containing `trusted\\.com`."
+  },
+  "what_goes_wrong": "A substring/prefix check for \"trusted.com\" passes on `http://trusted.com@evil.com/`, but the browser (or any real HTTP client) actually connects to `evil.com` - `trusted.com` here is just userinfo (a username with no password), not the host, and both a proper WHATWG `URL` parse and Python's `urlparse` agree the real host is `evil.com`.",
+  "why": "RFC 3986's authority component has the shape `userinfo@host:port` - everything before an `@` in the authority is credentials, not part of the hostname, and both a real URL parser and the browser's address bar logic strip it before deciding where to connect. A regex or `startsWith` check that only looks for the trusted domain's text anywhere near the front of the string has no concept of URL grammar at all, so it is fooled by a syntax feature (`@`) that every conformant parser already understands correctly. This is not a parser disagreement - it's a gap between \"looks like it mentions the right domain\" and \"actually parses to the right host\".",
+  "affects": [
+    "python",
+    "javascript",
+    "any string-based (non-parsing) URL trust check"
+  ],
+  "repros": [
+    {
+      "language": "javascript",
+      "code": "const u = new URL(\"http://trusted.com@evil.com/\");\nconsole.log(u.hostname, u.username);\nconsole.log(\"http://trusted.com@evil.com/\".startsWith(\"http://trusted.com\"));\n",
+      "expected_output": "evil.com trusted.com\ntrue",
+      "verified_with": "Node.js v22.22.2"
+    },
+    {
+      "language": "python",
+      "code": "from urllib.parse import urlparse\nu = urlparse(\"http://trusted.com@evil.com/\")\nprint(u.hostname, u.username)\nprint(\"http://trusted.com@evil.com/\".startswith(\"http://trusted.com\"))\n",
+      "expected_output": "evil.com trusted.com\nTrue",
+      "verified_with": "Python 3.14.2"
+    }
+  ],
+  "fix": "Never validate a URL's target by substring or prefix matching on the raw string. Parse the URL and compare the parsed `.hostname` against an allowlist of exact hostnames (or a proper suffix match on the hostname component specifically, e.g. ends with `.trusted.com`), never against the whole URL text.",
+  "related": [
+    "url-backslash-treated-as-slash-whatwg"
+  ],
+  "sources": [
+    {
+      "title": "RFC 3986: Uniform Resource Identifier (URI): Generic Syntax, Section 3.2",
+      "url": "https://www.rfc-editor.org/rfc/rfc3986#section-3.2"
+    },
+    {
+      "title": "WHATWG URL Standard",
+      "url": "https://url.spec.whatwg.org/"
+    }
+  ],
+  "tags": [
+    "url",
+    "parsing",
+    "security",
+    "validation"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "http://trusted.com@evil.com/"
+      ],
+      "relation": "no_crash",
+      "note": "their_is_trusted_url(url) must parse the URL and check the hostname field - not check whether the string contains or starts with the trusted domain's text - or this input will pass a check it should fail."
+    }
+  ]
+}

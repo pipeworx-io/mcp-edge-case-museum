@@ -1,0 +1,63 @@
+{
+  "id": "splitting-100-dollars-three-ways-leaves-a-cent",
+  "title": "Splitting $100.00 three ways and rounding each share loses a cent",
+  "category": "float-money",
+  "assumption": "Dividing a total into N equal shares and rounding each share to the nearest cent reconstructs the original total when you add the shares back up.",
+  "input": {
+    "display": "10000 cents / 3, rounded, times 3",
+    "description": "Splitting a bill, a refund, or a revenue share three ways (or any way that doesn't divide evenly) and charging/crediting each party its rounded share."
+  },
+  "what_goes_wrong": "$100.00 split three ways gives 3333.33... cents per share; rounding each share to 3333 cents and charging three people that amount collects only $99.99 in total - one cent has vanished, and nobody's individual charge was wrong in isolation.",
+  "why": "10000 / 3 is not an integer, so any rounding of the per-share amount (3333.333... -> 3333) discards a fractional remainder. Doing that independently for each of the three shares discards the remainder three times instead of accounting for it once, so the sum of the rounded shares no longer equals the original total. This isn't a floating-point bug - it happens with exact integer-cent arithmetic too - it's a remainder-allocation bug: dividing a fixed amount into N parts leaves `total mod N` leftover units (here 1 cent) that something has to explicitly absorb.",
+  "affects": [
+    "python",
+    "javascript",
+    "any integer or float division used to split a shared amount"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "total_cents = 10000\nn = 3\nshare = round(total_cents / n)\nprint(share, share * n, total_cents - share * n)\n",
+      "expected_output": "3333 9999 1",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "const totalCents = 10000;\nconst n = 3;\nconst share = Math.round(totalCents / n);\nconsole.log(share, share * n, totalCents - share * n);\n",
+      "expected_output": "3333 9999 1",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Work in integer cents and allocate the remainder explicitly: every share gets `total // n`, and the first `total % n` shares get one extra cent (10000 split 3 ways -> [3334, 3333, 3333]). The shares then always sum to the exact original total and differ by at most one cent; which recipients get the extra cents is a product decision, but something must hand them out deliberately.",
+  "related": [
+    "negative-zero-balance-formatting"
+  ],
+  "sources": [
+    {
+      "title": "Python docs: 15.1. Floating-Point Arithmetic: Issues and Limitations",
+      "url": "https://docs.python.org/3/tutorial/floatingpoint.html"
+    }
+  ],
+  "tags": [
+    "money",
+    "rounding",
+    "accounting",
+    "invoice",
+    "price"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        10000,
+        3
+      ],
+      "relation": "returns",
+      "expected": [
+        3334,
+        3333,
+        3333
+      ],
+      "note": "A splitting function their_function(totalCents, n) should return shares that sum to exactly totalCents - e.g. [3334, 3333, 3333], not three independently-rounded 3333s that sum to 9999."
+    }
+  ]
+}

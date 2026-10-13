@@ -1,0 +1,58 @@
+{
+  "id": "json-lone-surrogate-roundtrip",
+  "title": "JSON.parse happily accepts a string with an unpaired surrogate - and converting it to UTF-8 corrupts or crashes later",
+  "category": "parsing",
+  "assumption": "If JSON.parse (or json.loads) accepts a string without error, that string is well-formed Unicode text that any later encoding step will handle safely.",
+  "input": {
+    "display": "\"\\ud800\" (a lone UTF-16 high surrogate, with no matching low surrogate)",
+    "description": "A string field corrupted upstream - a truncated emoji or CJK character cut exactly between its two surrogate halves, or data copied out of a UTF-16 source (e.g. a Windows filename or a Java/C# string) that already contained an unpaired surrogate - serialized into a JSON payload via a \\u escape."
+  },
+  "what_goes_wrong": "Both `JSON.parse` and Python's `json.loads` accept the escape `\\ud800` and hand back a string containing that single unpaired surrogate, with no error. The corruption surfaces later and differently in each language: encoding that Python string to UTF-8 raises `UnicodeEncodeError`, while in Node, `Buffer.from(s, \"utf8\")` silently replaces the lone surrogate with the U+FFFD replacement character - no exception, no warning, just a quietly different byte sequence than the one sent.",
+  "why": "JSON strings are defined over Unicode code points via `\\uXXXX` escapes, and RFC 8259 section 8.2 explicitly notes that the grammar allows an escape for a lone surrogate, leaving the behaviour of receiving software unpredictable - a parser that checks syntax is not required to check that the resulting text is well-formed Unicode. JavaScript strings are UTF-16 code unit sequences and can hold an unpaired surrogate without complaint, so `JSON.parse`/`JSON.stringify` round-trip it fine as a JS value. Python `str` objects are sequences of Unicode code points (including surrogates, which Python represents but which are not valid scalar values), so `json.loads` accepts the escape too - the failure only appears once something tries to encode that code point as actual UTF-8 bytes, because UTF-8 has no legal encoding for a surrogate on its own.",
+  "affects": [
+    "python",
+    "javascript"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "import json\ns = json.loads('\"\\\\ud800\"')\nprint(len(s), hex(ord(s)))\ntry:\n    s.encode(\"utf-8\")\nexcept UnicodeEncodeError as e:\n    print(\"UnicodeEncodeError:\", e)\n",
+      "expected_output": "1 0xd800\nUnicodeEncodeError: 'utf-8' codec can't encode character '\\ud800' in position 0: surrogates not allowed",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "const s = JSON.parse('\"\\\\ud800\"');\nconsole.log(s.length, s.charCodeAt(0).toString(16));\nconsole.log(JSON.stringify(s));\nconst buf = Buffer.from(s, \"utf8\");\nconsole.log(buf.toString(\"hex\"), buf.length);\n",
+      "expected_output": "1 d800\n\"\\ud800\"\nefbfbd 3",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Check that decoded JSON strings are well-formed Unicode before re-encoding them: in Python, `s.encode(\"utf-8\")` (strict) raises on a lone surrogate; in JavaScript, `s.isWellFormed()` (Node 20+, ES2024) returns false for it, and `s.toWellFormed()` substitutes U+FFFD explicitly. Do this before `Buffer.from(s, \"utf8\")`, which substitutes silently.",
+  "related": [],
+  "sources": [
+    {
+      "title": "RFC 8259 section 8.2: Unicode characters (unpaired surrogates)",
+      "url": "https://www.rfc-editor.org/rfc/rfc8259#section-8.2"
+    },
+    {
+      "title": "Unicode Standard Annex #15 glossary: Unpaired Surrogate",
+      "url": "https://www.unicode.org/glossary/#unpaired_surrogate"
+    }
+  ],
+  "tags": [
+    "json",
+    "parsing",
+    "validation",
+    "security",
+    "i18n"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "\"\\ud800\""
+      ],
+      "relation": "no_crash",
+      "note": "their_parse_json(text) may legitimately accept this string, but whatever encodes the result to UTF-8 downstream must handle (reject or substitute) an unpaired surrogate rather than silently corrupting it."
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+{
+  "id": "json-parse-loses-id-precision",
+  "title": "JSON.parse silently rounds a 64-bit id to the nearest value a JS number can hold",
+  "category": "integers",
+  "assumption": "Parsing a JSON number and then stringifying it again gives back the exact same digits you started with.",
+  "input": {
+    "display": "JSON.parse(\"9007199254740993\")  (a Twitter/Discord/Snowflake-style 64-bit id, one more than Number.MAX_SAFE_INTEGER)",
+    "description": "Any API that returns large integer ids as bare JSON numbers (not strings) -- Twitter/X status ids, Discord snowflakes, some database auto-increment ids -- consumed by a JavaScript client."
+  },
+  "what_goes_wrong": "An id of 9007199254740993 round-trips through `JSON.parse` as 9007199254740992 -- a different, smaller, EVEN number -- so looking that id up, comparing it, or sending it back to the server can silently hit the wrong record or none at all.",
+  "why": "The JSON specification defines numbers as an abstract decimal value with no size limit, but JavaScript's `JSON.parse` converts every JSON number into a 64-bit double, which (per IEEE 754) represents every integer exactly only up to 2^53; above that, neighbouring integers start sharing a double, which is why 2^53 - 1 is the largest 'safe' integer. 9007199254740993 (2^53 + 1) has no exact double representation; the nearest one is 2^53 (9007199254740992), and ties-to-even rounding picks that over 2^53 + 2. This is exactly why large-id APIs increasingly send such ids as JSON strings instead of bare numbers.",
+  "affects": [
+    "javascript"
+  ],
+  "repros": [
+    {
+      "language": "javascript",
+      "code": "const id = JSON.parse(\"9007199254740993\");\nconsole.log(id);\nconsole.log(id === 9007199254740992);\nconsole.log(JSON.stringify(id));\n",
+      "expected_output": "9007199254740992\ntrue\n9007199254740992",
+      "verified_with": "Node.js v22.22.2"
+    },
+    {
+      "language": "python",
+      "code": "import json\n\n# Python's json module parses integers into arbitrary-precision int, so no\n# precision is lost here -- the gotcha is specific to a 64-bit-double parser.\nid_value = json.loads(\"9007199254740993\")\nprint(id_value, id_value == 9007199254740993)\n",
+      "expected_output": "9007199254740993 True",
+      "verified_with": "Python 3.14.2"
+    }
+  ],
+  "fix": "Never transmit an id that could exceed 2^53 - 1 as a bare JSON number; encode it as a JSON string on the wire, and parse/compare it as a string or BigInt on the JavaScript side, never as a plain `number`. If you cannot change the wire format, V8-based runtimes (Node 22, recent Chrome) pass the raw source text to a reviver as a third argument: `JSON.parse(text, (k, v, ctx) => typeof v === 'number' && !Number.isSafeInteger(v) ? BigInt(ctx.source) : v)`.",
+  "related": [
+    "max-safe-integer-plus-one-equals-plus-two"
+  ],
+  "sources": [
+    {
+      "title": "RFC 8259: The JSON Data Interchange Format (numbers have no size limit)",
+      "url": "https://www.rfc-editor.org/rfc/rfc8259#section-6"
+    },
+    {
+      "title": "MDN: JSON.parse",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON/parse"
+    }
+  ],
+  "tags": [
+    "id",
+    "json",
+    "parsing",
+    "database"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "9007199254740993"
+      ],
+      "relation": "no_crash",
+      "note": "Parsing a large id from JSON must not silently change its value; compare as string or BigInt."
+    }
+  ]
+}

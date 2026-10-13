@@ -1,0 +1,62 @@
+{
+  "id": "zero-width-space-username",
+  "title": "A username with an invisible character survives trim() and slips past a block on \"admin\"",
+  "category": "unicode",
+  "assumption": "strip()/trim() removes anything that isn't visible, so a trimmed string can't contain hidden characters.",
+  "input": {
+    "display": "\"ad\\u200bmin\" (ZERO WIDTH SPACE, U+200B, inserted in the middle) vs \"admin\"",
+    "description": "Pasted text from a chat app, a scraped web page, or a deliberately crafted signup request trying to register a name that looks reserved but technically isn't."
+  },
+  "what_goes_wrong": "\"ad\\u200bmin\" renders as \"admin\", is not equal to \"admin\", is one code point longer, and strip()/trim() leaves it completely unchanged because U+200B sits in the middle of the string, not at an edge, and Unicode does not even classify it as whitespace.",
+  "why": "ZERO WIDTH SPACE (U+200B) has no visible glyph; text-layout engines use it to mark an optional line break inside long words. Its General Category is Cf (format), not Zs (space separator), and it does not have the Unicode White_Space property, so Python's str.strip() and JavaScript's trim() do not treat it as whitespace, and here it is in the middle of the string anyway. ZERO WIDTH JOINER (U+200D) and ZERO WIDTH NO-BREAK SPACE / BOM (U+FEFF) work the same way in the middle of a string. (At the edges JavaScript's trim() does remove U+FEFF, because ECMAScript counts it as whitespace; Python's strip() does not.)",
+  "affects": [
+    "python",
+    "javascript"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "a = \"admin\"\nb = \"ad\\u200bmin\"\nprint(a == b, len(a), len(b))\nprint(b.strip() == a, len(b.strip()))\n",
+      "expected_output": "False 5 6\nFalse 6",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "const a = \"admin\";\nconst b = \"ad\\u200bmin\";\nconsole.log(a === b, a.length, b.length);\nconsole.log(b.trim() === a, b.trim().length);\n",
+      "expected_output": "false 5 6\nfalse 6",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Strip or reject Unicode format characters (category Cf) and other invisible code points explicitly during input sanitization, not just leading/trailing whitespace — don't rely on strip()/trim() to catch them, and don't assume a blocklist check on reserved names (\"admin\", \"root\") is safe without first removing invisibles.",
+  "related": [
+    "cyrillic-homoglyph-paypal-spoof"
+  ],
+  "sources": [
+    {
+      "title": "Unicode Character Database: General Category values (Cf = Format)",
+      "url": "https://www.unicode.org/reports/tr44/#General_Category_Values"
+    },
+    {
+      "title": "Big List of Naughty Strings (MIT)",
+      "url": "https://github.com/minimaxir/big-list-of-naughty-strings"
+    }
+  ],
+  "tags": [
+    "username",
+    "uniqueness",
+    "login",
+    "security",
+    "validation",
+    "forms"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "admin",
+        "ad​min"
+      ],
+      "relation": "equal",
+      "note": "The key used for reserved-name and uniqueness checks should remove invisible format characters (category Cf) so both map to \"admin\" and the second is blocked."
+    }
+  ]
+}

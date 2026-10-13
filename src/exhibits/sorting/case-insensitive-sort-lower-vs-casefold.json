@@ -1,0 +1,56 @@
+{
+  "id": "case-insensitive-sort-lower-vs-casefold",
+  "title": "Switching a sort key from .lower() to .casefold() changes the order of unrelated-looking rows",
+  "category": "sorting",
+  "assumption": "lower() and casefold() are interchangeable ways to spell \"case-insensitive sort key\" — swapping one for the other can only change case-sensitivity bugs, never the actual ordering of already-matching rows.",
+  "input": {
+    "display": "[\"Stra\\u00dfe\", \"strasse\", \"Strasse\"] sorted with key=str.lower vs key=str.casefold",
+    "description": "A list of street-name or username variants containing German ß, sorted case-insensitively for display or dedup grouping."
+  },
+  "what_goes_wrong": "sorted(words, key=str.lower) returns [\"strasse\", \"Strasse\", \"Stra\\u00dfe\"]: \"Stra\\u00dfe\" sorts last, after both ASCII spellings. sorted(words, key=str.casefold) returns [\"Stra\\u00dfe\", \"strasse\", \"Strasse\"]: \"Stra\\u00dfe\" now sorts FIRST. The three rows are the same; only the key function changed. JavaScript shows the same flip between a toLowerCase() comparator and an Intl.Collator with sensitivity \"base\".",
+  "why": "str.lower() leaves ß as ß, so the key for \"Straße\" is \"straße\", which differs from \"strasse\" at the fifth character; ß (U+00DF) is a higher code point than \"s\", so it sorts after both ASCII spellings. str.casefold() applies Unicode full case folding (CaseFolding.txt), which maps ß to \"ss\", so the key for \"Straße\" becomes \"strasse\", identical to the other two rows' keys. With all three keys tied, Python's stable sort keeps the rows in input order, which is why \"Straße\" (first in the input) comes out first instead of last. JavaScript has no casefold(), but the same shift happens when a comparator moves from toLowerCase() to an Intl.Collator with sensitivity \"base\", which also treats ß and ss as equal.",
+  "affects": [
+    "python",
+    "javascript"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "words = [\"Stra\\u00dfe\", \"strasse\", \"Strasse\"]\nprint(sorted(words, key=str.lower))\nprint(sorted(words, key=str.casefold))\n",
+      "expected_output": "['strasse', 'Strasse', 'Straße']\n['Straße', 'strasse', 'Strasse']",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "const words = [\"Stra\\u00dfe\", \"strasse\", \"Strasse\"];\nconst byLower = (a, b) => { const x = a.toLowerCase(), y = b.toLowerCase(); return x < y ? -1 : x > y ? 1 : 0; };\nconsole.log(words.slice().sort(byLower));\nconsole.log(words.slice().sort(new Intl.Collator(\"en\", { sensitivity: \"base\" }).compare));\n",
+      "expected_output": "[ 'strasse', 'Strasse', 'Straße' ]\n[ 'Straße', 'strasse', 'Strasse' ]",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Decide deliberately whether your case-insensitive key should treat folding equivalences like \\u00df\\u2192ss as ties, and know that changing the folding function (lower() vs casefold() in Python, toLowerCase() vs a base-sensitivity Intl.Collator in JavaScript) can change sort order, not just equality. If the final order must be deterministic, add a tiebreaker (for example the original string) after the case-insensitive key: key=lambda s: (s.casefold(), s).",
+  "related": [
+    "german-eszett-case-fold",
+    "byte-order-caps-before-lowercase"
+  ],
+  "sources": [
+    {
+      "title": "Python docs: str.casefold",
+      "url": "https://docs.python.org/3/library/stdtypes.html#str.casefold"
+    },
+    {
+      "title": "Unicode Standard: CaseFolding.txt",
+      "url": "https://www.unicode.org/Public/UCD/latest/ucd/CaseFolding.txt"
+    },
+    {
+      "title": "MDN: Intl.Collator() constructor, sensitivity option",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/Collator/Collator"
+    }
+  ],
+  "tags": [
+    "sorting",
+    "comparison",
+    "names",
+    "i18n",
+    "normalization"
+  ]
+}

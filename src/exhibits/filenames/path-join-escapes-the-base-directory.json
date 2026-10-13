@@ -1,0 +1,63 @@
+{
+  "id": "path-join-escapes-the-base-directory",
+  "title": "Joining a trusted folder with a filename doesn't confine the result to that folder",
+  "category": "filenames",
+  "assumption": "os.path.join(trusted_base, user_supplied_name) always produces a path inside trusted_base.",
+  "input": {
+    "display": "\"../../etc/passwd\" joined onto \"/srv/uploads\"",
+    "description": "An upload handler or export feature that builds a save path from a base directory plus a user-controlled filename."
+  },
+  "what_goes_wrong": "The joined path points outside the upload directory entirely, letting a crafted filename read or overwrite files the base directory was supposed to contain.",
+  "why": "os.path.join concatenates path segments; it never checks whether a later argument walks back out of the first with `..` components, it just glues the strings together, and the escape only becomes visible once the OS resolves the dots at open time. Node's path.join goes further and actively normalizes `.` and `..` within the joined string itself, so the same escape is visible immediately in the returned string rather than only at the filesystem call. Either way, neither function treats its first argument as a security boundary; it is nothing more than the first string in a concatenation.",
+  "affects": [
+    "python os.path.join",
+    "node path.join",
+    "any 'join the base dir with the filename' upload handler"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "import os.path\njoined = os.path.join(\"/srv/uploads\", \"../../etc/passwd\")\nprint(joined)\nprint(joined.startswith(\"/srv/uploads\"))\n",
+      "expected_output": "/srv/uploads/../../etc/passwd\nTrue",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "import path from 'node:path';\nconst joined = path.join(\"/srv/uploads\", \"../../etc/passwd\");\nconsole.log(joined);\nconsole.log(joined.startsWith(\"/srv/uploads\"));\n",
+      "expected_output": "/etc/passwd\nfalse",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "After joining, resolve the result to an absolute, normalized path (os.path.realpath / path.resolve) and verify it still starts with the resolved base directory before touching the filesystem; reject anything that doesn't.",
+  "related": [
+    "absolute-second-argument-resets-join",
+    "windows-backslash-traversal-ntpath"
+  ],
+  "sources": [
+    {
+      "title": "Python docs: os.path.join",
+      "url": "https://docs.python.org/3/library/os.path.html#os.path.join"
+    },
+    {
+      "title": "Node.js docs: path.join",
+      "url": "https://nodejs.org/api/path.html#pathjoinpaths"
+    }
+  ],
+  "tags": [
+    "filename",
+    "path",
+    "upload",
+    "security",
+    "validation"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "/srv/uploads",
+        "../../etc/passwd"
+      ],
+      "relation": "no_crash",
+      "note": "Your path-builder should either refuse this filename or produce a path still inside the base directory — check which, don't assume."
+    }
+  ]
+}

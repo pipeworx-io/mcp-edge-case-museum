@@ -1,0 +1,77 @@
+{
+  "id": "sum-ten-dimes-not-a-dollar",
+  "title": "Ten 0.1s added in a loop don't equal 1 - but since Python 3.12, sum() gives exactly 1.0 and the loop still doesn't",
+  "category": "float-money",
+  "assumption": "Accumulating ten $0.10 charges one at a time gives exactly $1.00, and Python's sum() is just a loop in disguise.",
+  "input": {
+    "display": "a loop adding 0.1 ten times, vs. sum([0.1] * 10)",
+    "description": "A running total built up line-by-line as items are scanned or charges applied, e.g. ten $0.10 surcharges added to an order as it is built."
+  },
+  "what_goes_wrong": "A hand-written accumulator (`total += 0.1` ten times) ends at 0.9999999999999999, not 1.0, in both Python and JavaScript - but on Python 3.12 and later the built-in `sum([0.1]*10)` prints exactly 1.0 (on 3.11 and earlier it printed 0.9999999999999999, same as the loop), so swapping a loop for `sum()`, or upgrading Python, silently changes the answer.",
+  "why": "Each addition rounds to the nearest representable double, and those small rounding errors compound across ten sequential additions, landing one ULP below 1.0. In Python 3.12, CPython's built-in `sum()` switched to compensated (Neumaier) summation for floats: it carries the rounding error of each addition in a separate correction term and adds it back at the end, so for this input it no longer reproduces the naive loop's error. It is not the same as `math.fsum` (which is exactly rounded for every input); the docs only promise \"higher accuracy and better commutativity on most builds\". JavaScript has no built-in equivalent in Node 22 - `reduce` and a hand-rolled loop behave identically because both are plain sequential addition.",
+  "affects": [
+    "python",
+    "javascript"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "total = 0.0\nfor _ in range(10):\n    total += 0.1\nprint(total, total == 1.0)\nprint(sum([0.1] * 10), sum([0.1] * 10) == 1.0)\n",
+      "expected_output": "0.9999999999999999 False\n1.0 True",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "let total = 0;\nfor (let i = 0; i < 10; i++) { total += 0.1; }\nconsole.log(total, total === 1);\nconst reduced = [0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1].reduce((a, b) => a + b, 0);\nconsole.log(reduced, reduced === 1);\n",
+      "expected_output": "0.9999999999999999 false\n0.9999999999999999 false",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Do the running total in integer minor units (cents) or with a Decimal type, not floating-point dollars. Don't rely on `sum()` happening to be more accurate than a loop in a particular Python version - that's an implementation detail, not a guarantee for every float computation.",
+  "related": [
+    "float-anchor-0-1-plus-0-2",
+    "naive-loop-sum-order-dependence"
+  ],
+  "sources": [
+    {
+      "title": "Python docs: sum()",
+      "url": "https://docs.python.org/3/library/functions.html#sum"
+    },
+    {
+      "title": "What's New In Python 3.12",
+      "url": "https://docs.python.org/3/whatsnew/3.12.html"
+    },
+    {
+      "title": "Python docs: 15.1. Floating-Point Arithmetic: Issues and Limitations",
+      "url": "https://docs.python.org/3/tutorial/floatingpoint.html"
+    }
+  ],
+  "tags": [
+    "money",
+    "rounding",
+    "currency",
+    "accounting",
+    "price",
+    "invoice"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        [
+          0.1,
+          0.1,
+          0.1,
+          0.1,
+          0.1,
+          0.1,
+          0.1,
+          0.1,
+          0.1,
+          0.1
+        ]
+      ],
+      "relation": "no_crash",
+      "note": "A totaling function should not assume their_function(ten dimes) == 1.0 unless it works in integer cents or Decimal; don't trust that it happens to round correctly on today's runtime."
+    }
+  ]
+}

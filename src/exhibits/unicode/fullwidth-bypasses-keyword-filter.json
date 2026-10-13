@@ -1,0 +1,61 @@
+{
+  "id": "fullwidth-bypasses-keyword-filter",
+  "title": "A fullwidth \"select\" slips past a keyword filter, then reappears as literal \"select\" after normalization",
+  "category": "unicode",
+  "assumption": "If a blocklist check on the raw input says a dangerous keyword isn't present, it isn't present anywhere downstream either.",
+  "input": {
+    "display": "\"\\uff53\\uff45\\uff4c\\uff45\\uff43\\uff54\" (FULLWIDTH LATIN letters spelling \"select\")",
+    "description": "User input containing a blocked keyword spelled with fullwidth Unicode letters (common in East Asian input methods, and a known WAF/filter-bypass technique), which is later normalized for display or by a downstream system/collation before being used."
+  },
+  "what_goes_wrong": "\"select\" in payload.lower() is False on the raw fullwidth string, so a naive keyword blocklist lets it through. Once the same string is NFKC-normalized (for display, by a second validation layer, or by a downstream service), it becomes the literal ASCII word \"select\", and the keyword the filter was supposed to catch is present after all. Some database collations also compare fullwidth and ASCII letters as equal without changing the stored text.",
+  "why": "FULLWIDTH LATIN SMALL LETTER <X> code points (U+FF41-U+FF5A) are compatibility characters: Unicode's own decomposition mapping, used by NFKC, defines each one as equivalent to its ordinary ASCII letter, specifically so systems that care about the abstract text (rather than its East-Asian-typesetting width) can fold them together. A substring/equality check on the un-normalized string sees entirely different code points and finds no match; the moment anything in the pipeline normalizes before the keyword check runs, the two representations become the same string. This is why normalize-then-validate is safe and validate-then-normalize is not — order matters.",
+  "affects": [
+    "python",
+    "javascript"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "import unicodedata\npayload = \"\\uff53\\uff45\\uff4c\\uff45\\uff43\\uff54\"\nprint(\"select\" in payload.lower())\nnormalized = unicodedata.normalize(\"NFKC\", payload)\nprint(normalized, \"select\" in normalized.lower())\n",
+      "expected_output": "False\nselect True",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "const payload = \"\\uff53\\uff45\\uff4c\\uff45\\uff43\\uff54\";\nconsole.log(payload.toLowerCase().includes(\"select\"));\nconst normalized = payload.normalize(\"NFKC\");\nconsole.log(normalized, normalized.toLowerCase().includes(\"select\"));\n",
+      "expected_output": "false\nselect true",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Normalize (NFKC) untrusted text BEFORE running any keyword, blocklist, or validation check against it, never after. If anything later in the pipeline normalizes or compares width-insensitively (a display layer, another service, a database collation), the filter in front of it must assume the same folding. Keyword blocklists are a weak defence against injection anyway; parameterized queries are the real fix for SQL.",
+  "related": [
+    "nfkc-compatibility-folding",
+    "cyrillic-homoglyph-paypal-spoof"
+  ],
+  "sources": [
+    {
+      "title": "Unicode Standard Annex #15: Unicode Normalization Forms (NFKC)",
+      "url": "https://www.unicode.org/reports/tr15/"
+    },
+    {
+      "title": "Unicode Technical Standard #39: Unicode Security Mechanisms",
+      "url": "https://www.unicode.org/reports/tr39/"
+    }
+  ],
+  "tags": [
+    "security",
+    "validation",
+    "normalization",
+    "parsing",
+    "forms"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "ｓｅｌｅｃｔ"
+      ],
+      "relation": "no_crash",
+      "note": "A keyword blocklist must reject this string if it would reject \"select\" after any normalization step anywhere later in the system — check both forms, or normalize first."
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "id": "json-duplicate-keys-last-wins",
+  "title": "A JSON object with the same key twice parses fine - and silently keeps only the last one",
+  "category": "parsing",
+  "assumption": "A JSON parser rejects (or at least warns about) an object literal that repeats a key, the way a careful reviewer would.",
+  "input": {
+    "display": "{\"a\":1,\"a\":2}",
+    "description": "A JSON payload assembled by string concatenation, a buggy serializer, or a merge of two partial objects that happens to repeat a key - e.g. a webhook payload built from two code paths that both set `\"status\"`."
+  },
+  "what_goes_wrong": "Both Python's `json.loads` and JavaScript's `JSON.parse` accept `{\"a\":1,\"a\":2}` without error and return `{\"a\": 2}` - the first value is discarded with no warning, exception, or trace that the input ever had a conflict.",
+  "why": "The JSON grammar (RFC 8259 section 4) does not forbid duplicate names in an object: names SHOULD be unique, and when they aren't, the RFC says the behaviour of receiving software is unpredictable. The two languages then pin it down themselves. ECMA-262 specifies that `JSON.parse` overwrites a lexically earlier value with a later one for the same key, so last-wins is guaranteed in every conforming JavaScript engine. Python's `json` module documents the same choice: it does not raise and keeps only the last name/value pair. Other parsers in other languages may keep the first value or reject the document, which is how two services can read different values from the same payload.",
+  "affects": [
+    "python",
+    "javascript"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "import json\nprint(json.loads('{\"a\":1,\"a\":2}'))\n",
+      "expected_output": "{'a': 2}",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "console.log(JSON.parse('{\"a\":1,\"a\":2}'));\n",
+      "expected_output": "{ a: 2 }",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Detect duplicates explicitly where they matter. In Python, pass `object_pairs_hook` to `json.loads` and raise if a key repeats; in JavaScript, `JSON.parse` cannot report duplicates, so use a streaming/tokenizing parser that can, or reject them at the producer. Don't assume a successfully-parsed object had exactly the keys the sender wrote.",
+  "related": [],
+  "sources": [
+    {
+      "title": "RFC 8259: The JavaScript Object Notation (JSON) Data Interchange Format, Section 4",
+      "url": "https://www.rfc-editor.org/rfc/rfc8259#section-4"
+    },
+    {
+      "title": "Python docs: json - JSON encoder and decoder",
+      "url": "https://docs.python.org/3/library/json.html"
+    },
+    {
+      "title": "ECMA-262: JSON.parse",
+      "url": "https://tc39.es/ecma262/#sec-json.parse"
+    }
+  ],
+  "tags": [
+    "json",
+    "parsing",
+    "validation",
+    "security"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "{\"a\":1,\"a\":2}"
+      ],
+      "relation": "returns",
+      "expected": {
+        "a": 2
+      },
+      "note": "their_parse(json_text) on an object with a repeated key returns the last value under standard parsers - if two upstream systems disagree about which value should win, catch this before trusting the parsed result."
+    }
+  ]
+}

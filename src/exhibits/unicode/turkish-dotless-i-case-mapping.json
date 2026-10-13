@@ -1,0 +1,72 @@
+{
+  "id": "turkish-dotless-i-case-mapping",
+  "title": "Lowercasing a Turkish İ does not give you plain \"i\"",
+  "category": "unicode",
+  "assumption": "Lowercasing a capital letter and comparing it to the obvious ASCII spelling works the way it does for A-Z.",
+  "input": {
+    "display": "\"\\u0130stanbul\" (capital I with dot above, U+0130) vs \"istanbul\"",
+    "description": "A user from Turkey types their city, or their own name, into a search box or signup form that lowercases input to build a case-insensitive lookup key."
+  },
+  "what_goes_wrong": "\"\\u0130stanbul\".lower() is not \"istanbul\" — it becomes \"i\\u0307stanbul\" (9 code points instead of 8), so the case-insensitive match against the plain spelling fails, and NFC normalization does not repair it.",
+  "why": "Python's str.lower() and JavaScript's toLowerCase() apply Unicode's default, locale-independent case mapping. The default lowercase of U+0130 (LATIN CAPITAL LETTER I WITH DOT ABOVE) is two code points, U+0069 U+0307 (\"i\" plus COMBINING DOT ABOVE), so the dot is preserved without knowing whether the text is Turkish. Turkish and Azerbaijani pair İ with i and I with ı (dotless), which needs a locale-specific mapping: JavaScript has one in toLocaleLowerCase(\"tr\"), which returns plain \"istanbul\" here, but Python's str methods take no locale. There is no precomposed lowercase \"i with dot above\" (i already has a dot), so NFC normalization afterwards does not collapse the pair back to plain \"i\".",
+  "affects": [
+    "python",
+    "javascript"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "import unicodedata\ns = \"\\u0130stanbul\"\nlowered = s.lower()\nprint(lowered, len(s), len(lowered))\nprint(lowered == \"istanbul\")\nprint(unicodedata.normalize(\"NFC\", lowered) == \"istanbul\")\n",
+      "expected_output": "i̇stanbul 8 9\nFalse\nFalse",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "const s = \"\\u0130stanbul\";\nconst lowered = s.toLowerCase();\nconsole.log(lowered, s.length, lowered.length);\nconsole.log(lowered === \"istanbul\");\nconsole.log(lowered.normalize(\"NFC\") === \"istanbul\");\n",
+      "expected_output": "i̇stanbul 8 9\nfalse\nfalse",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Do not build a uniqueness or search key by calling lower()/upper() on raw user text when the content may be Turkish or Azerbaijani. When you know the locale, use locale-aware mapping (toLocaleLowerCase(\"tr\") in JavaScript, ICU case mapping with locale \"tr\"/\"az\" in Python via a third-party binding). When you do not, use casefold() consistently on both sides, and accept that İ/I/ı/i cannot be folded correctly for every language at once.",
+  "related": [
+    "german-eszett-case-fold",
+    "nfc-nfd-same-name-two-accounts"
+  ],
+  "sources": [
+    {
+      "title": "Unicode Standard: SpecialCasing.txt (default vs. Turkish/Azeri case mappings)",
+      "url": "https://www.unicode.org/Public/UCD/latest/ucd/SpecialCasing.txt"
+    },
+    {
+      "title": "Python docs: str.lower / str.upper",
+      "url": "https://docs.python.org/3/library/stdtypes.html#str.lower"
+    },
+    {
+      "title": "MDN: String.prototype.toLowerCase()",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/toLowerCase"
+    },
+    {
+      "title": "MDN: String.prototype.toLocaleLowerCase()",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/toLocaleLowerCase"
+    }
+  ],
+  "tags": [
+    "username",
+    "uniqueness",
+    "login",
+    "search",
+    "i18n",
+    "normalization",
+    "validation"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "İstanbul",
+        "İSTANBUL"
+      ],
+      "relation": "equal",
+      "note": "Any case-insensitive key should unify these two (casefold() does). Whether \"İstanbul\" should also match plain \"istanbul\" depends on the locale: yes under Turkish rules, no under the default mapping."
+    }
+  ]
+}

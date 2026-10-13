@@ -1,0 +1,50 @@
+{
+  "id": "fractional-utc-offsets-kathmandu-kolkata",
+  "title": "Not every timezone is a whole number of hours from UTC -- Nepal is 5 hours and 45 minutes off",
+  "category": "datetime",
+  "assumption": "A UTC offset is always a whole number of hours (or at worst, whole 30-minute steps).",
+  "input": {
+    "display": "ZoneInfo(\"Asia/Kathmandu\") -> UTC+05:45; ZoneInfo(\"Asia/Kolkata\") -> UTC+05:30",
+    "description": "Scheduling a meeting, computing 'business hours', or bucketing timestamps by local hour for users in Nepal, India, or several Pacific/Indian Ocean zones."
+  },
+  "what_goes_wrong": "Code that converts an offset to hours with integer math (`offset_minutes // 60`) or assumes `local_hour = (utc_hour + offset_hours) % 24` is correct silently produces times that are off by 15, 30, or 45 minutes for users in these zones.",
+  "why": "UTC offsets are defined per timezone by the IANA tz database and are not required to be whole hours. Nepal Standard Time is UTC+05:45, India Standard Time is UTC+05:30, and historically several zones have used offsets like +04:51 or +08:05:43 before standardization. Any code path that models 'timezone' as 'an integer number of hours' or truncates a fractional offset will misplace every timestamp converted through it by the truncated remainder.",
+  "affects": [
+    "python",
+    "javascript"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "from zoneinfo import ZoneInfo\nfrom datetime import datetime\n\nkathmandu = datetime(2024, 6, 1, 12, 0, tzinfo=ZoneInfo(\"Asia/Kathmandu\"))\nkolkata = datetime(2024, 6, 1, 12, 0, tzinfo=ZoneInfo(\"Asia/Kolkata\"))\nprint(\"Kathmandu offset:\", kathmandu.utcoffset())\nprint(\"Kolkata offset:\", kolkata.utcoffset())\nprint(\"naive hour-only offset would truncate to:\", kathmandu.utcoffset().seconds // 3600, \"hours, losing the 45 minutes\")\n",
+      "expected_output": "Kathmandu offset: 5:45:00\nKolkata offset: 5:30:00\nnaive hour-only offset would truncate to: 5 hours, losing the 45 minutes",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "function offsetMinutes(utcMs, timeZone) {\n  const dtf = new Intl.DateTimeFormat('en-US', { timeZone, hour12: false,\n    year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit' });\n  const parts = dtf.formatToParts(new Date(utcMs));\n  const o = {};\n  for (const p of parts) o[p.type] = p.value;\n  const asUTC = Date.UTC(+o.year, +o.month - 1, +o.day, +o.hour, +o.minute, +o.second);\n  return (asUTC - utcMs) / 60000;\n}\nconst t = Date.UTC(2024, 5, 1, 12, 0, 0);\nconsole.log('Kathmandu offset minutes:', offsetMinutes(t, 'Asia/Kathmandu'));\nconsole.log('Kolkata offset minutes:', offsetMinutes(t, 'Asia/Kolkata'));\n",
+      "expected_output": "Kathmandu offset minutes: 345\nKolkata offset minutes: 330",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Always carry UTC offsets (and do timezone conversion) in minutes or seconds, never truncated hours, and let the timezone library (zoneinfo, Intl) compute the offset rather than hand-rolling it from a hours table.",
+  "related": [
+    "lord-howe-30-minute-dst"
+  ],
+  "sources": [
+    {
+      "title": "IANA Time Zone Database",
+      "url": "https://www.iana.org/time-zones"
+    },
+    {
+      "title": "Wikipedia: list of UTC offsets (background, not sole source)",
+      "url": "https://en.wikipedia.org/wiki/List_of_UTC_offsets"
+    }
+  ],
+  "tags": [
+    "timezone",
+    "scheduling",
+    "date parsing"
+  ],
+  "test_cases": []
+}

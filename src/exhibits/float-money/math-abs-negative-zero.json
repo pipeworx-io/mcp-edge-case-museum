@@ -1,0 +1,51 @@
+{
+  "id": "math-abs-negative-zero",
+  "title": "-0 === 0 is true, yet 1 / -0 is -Infinity: JavaScript has a negative zero that equality and printing both hide",
+  "category": "float-money",
+  "assumption": "A number that compares equal to 0 is simply zero; there is nothing more to know about it.",
+  "input": {
+    "display": "-0 === 0 (true) but Object.is(-0, 0) === false, and 1 / -0 === -Infinity; Math.abs(-0) is +0",
+    "description": "A computed value that lands on exactly zero from the negative side -- e.g. a difference, a trig/rounding result, or a rate-of-change calculation -- then divided or compared downstream."
+  },
+  "what_goes_wrong": "A value that is mathematically zero but carries a negative sign bit compares equal to positive zero everywhere you'd check (`===`, `==`), so it passes any 'is this zero' test silently -- and then produces `-Infinity` instead of `+Infinity` the moment something divides by it, with no earlier signal that the sign mattered.",
+  "why": "IEEE 754 floating point has two distinct zeros, +0 and -0, which differ only in their sign bit, and ordinary code produces -0 easily: `Math.round(-0.4)`, `-1 * 0`, `0 / -5`. JavaScript's `===` treats them as equal (IsStrictlyEqual uses Number::equal, which special-cases +0 and -0), as do `==`, `Array.prototype.includes` and `Set`, and `String(-0)`, template literals and `JSON.stringify(-0)` all print \"0\", so the sign is invisible in logs. `Object.is()` exists specifically to expose the difference, using the SameValue algorithm. The sign bit survives arithmetic that `===` hides, which is why `1 / -0` and `1 / 0` differ. `Math.abs(-0)` does return +0, so taking the absolute value is one reliable way to normalise it.",
+  "affects": [
+    "javascript",
+    "python"
+  ],
+  "repros": [
+    {
+      "language": "javascript",
+      "code": "console.log(Math.abs(-0));\nconsole.log(-0 === 0, Object.is(-0, 0));\nconsole.log(1 / -0, 1 / 0);\n",
+      "expected_output": "0\ntrue false\n-Infinity Infinity",
+      "verified_with": "Node.js v22.22.2"
+    },
+    {
+      "language": "python",
+      "code": "print(abs(-0.0))\nprint(-0.0 == 0.0)\nimport math\nprint(math.copysign(1, -0.0))  # the sign survives, exposed explicitly\ntry:\n    print(1 / -0.0)\nexcept ZeroDivisionError as e:\n    print(\"ZeroDivisionError:\", e)  # Python refuses rather than returning -inf\n",
+      "expected_output": "0.0\nTrue\n-1.0\nZeroDivisionError: division by zero",
+      "verified_with": "Python 3.14.2"
+    }
+  ],
+  "fix": "If the sign of a zero result matters to your calculation (e.g. distinguishing 'approached from below' from 'approached from above'), check it explicitly with `Object.is(x, -0)` in JS or `math.copysign(1, x) < 0` in Python; don't rely on `===`/`==` to reveal it, since both treat -0 and 0 as equal.",
+  "related": [],
+  "sources": [
+    {
+      "title": "IEEE 754-2019 (floating-point arithmetic, signed zero)",
+      "url": "https://ieeexplore.ieee.org/document/8766229"
+    },
+    {
+      "title": "MDN: Object.is()",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/is"
+    },
+    {
+      "title": "ECMA-262: IsStrictlyEqual",
+      "url": "https://tc39.es/ecma262/#sec-isstrictlyequal"
+    }
+  ],
+  "tags": [
+    "validation",
+    "comparison"
+  ],
+  "test_cases": []
+}

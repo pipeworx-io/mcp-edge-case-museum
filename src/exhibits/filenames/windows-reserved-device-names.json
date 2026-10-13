@@ -1,0 +1,73 @@
+{
+  "id": "windows-reserved-device-names",
+  "title": "A file named CON, NUL, or COM1 opens a device on Windows, not a file",
+  "category": "filenames",
+  "assumption": "A filename made of ordinary letters is always safe to create as a file.",
+  "input": {
+    "display": "\"CON\", \"con.txt\", \"NUL\", \"COM1\", \"LPT1\"",
+    "description": "A user-supplied filename (upload name, export filename, log file name) that happens to match a reserved DOS device name."
+  },
+  "what_goes_wrong": "The app builds the path fine (ntpath/path.win32 never object), but the Win32 file APIs map the name to a legacy device instead of a file: writes to NUL vanish, CON is the console, COM1 is a serial port, so the 'file' is never created or the call fails far from where the name was accepted.",
+  "why": "CON, PRN, AUX, NUL, COM1-COM9 and LPT1-LPT9 (plus COM and LPT followed by the superscript digits ¹ ² ³) are reserved DOS device names that Win32 path normalization still recognizes for backward compatibility. Microsoft's naming rules also tell you to avoid them followed by an extension, stating that NUL.txt is equivalent to NUL; that held on every release before Windows 11, but .NET's path documentation notes that Windows 11 no longer always treats a name like CON.TXT as the device, so the extension form now depends on the Windows version. Pure path libraries only parse and join strings and never consult these rules, so ntpath.join and path.win32.join build every one of these paths without complaint.",
+  "affects": [
+    "windows win32 file apis (bare device names always; name-plus-extension forms before windows 11)",
+    "ntpath (no validation)",
+    "path.win32 (no validation)"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "import ntpath\nreserved = [\"CON\", \"con.txt\", \"NUL\", \"COM1\", \"LPT1\"]\nfor name in reserved:\n    joined = ntpath.join(\"C:\\\\Users\\\\me\\\\Documents\", name)\n    print(name, \"->\", joined)\n",
+      "expected_output": "CON -> C:\\Users\\me\\Documents\\CON\ncon.txt -> C:\\Users\\me\\Documents\\con.txt\nNUL -> C:\\Users\\me\\Documents\\NUL\nCOM1 -> C:\\Users\\me\\Documents\\COM1\nLPT1 -> C:\\Users\\me\\Documents\\LPT1",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "import path from 'node:path';\nconst reserved = [\"CON\", \"con.txt\", \"NUL\", \"COM1\", \"LPT1\"];\nfor (const name of reserved) {\n  const joined = path.win32.join(\"C:\\\\Users\\\\me\\\\Documents\", name);\n  console.log(name, \"->\", joined);\n}\n",
+      "expected_output": "CON -> C:\\Users\\me\\Documents\\CON\ncon.txt -> C:\\Users\\me\\Documents\\con.txt\nNUL -> C:\\Users\\me\\Documents\\NUL\nCOM1 -> C:\\Users\\me\\Documents\\COM1\nLPT1 -> C:\\Users\\me\\Documents\\LPT1",
+      "verified_with": "Node.js v22.22.2"
+    },
+    {
+      "language": "windows",
+      "status": "documented",
+      "note": "Opening CON, NUL, COM1 or LPT1 through the normal Win32 CreateFile path opens the device of that name rather than creating a file. Before Windows 11, con.txt behaved the same way; Windows 11 changed how name-plus-extension forms are interpreted. Every pure-path join above accepted all five names.",
+      "source": "https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file"
+    }
+  ],
+  "fix": "Reject user-supplied filenames whose base name (the text before the first dot, compared case-insensitively) is a reserved device name, including the extension forms, before touching the filesystem; reject them on every Windows version rather than relying on newer releases being more lenient.",
+  "related": [],
+  "sources": [
+    {
+      "title": "Microsoft Learn: Naming Files, Paths, and Namespaces",
+      "url": "https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file"
+    },
+    {
+      "title": "Microsoft Learn: File path formats on Windows systems (Handle legacy devices)",
+      "url": "https://learn.microsoft.com/en-us/dotnet/standard/io/file-path-formats"
+    }
+  ],
+  "tags": [
+    "filename",
+    "path",
+    "upload",
+    "validation",
+    "security",
+    "windows"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "CON.txt"
+      ],
+      "relation": "no_crash",
+      "note": "Your filename validator should flag this (a reserved device name with an extension) before any file is created on Windows, not after."
+    },
+    {
+      "inputs": [
+        "nul"
+      ],
+      "relation": "no_crash",
+      "note": "Reserved names are case-insensitive; a validator should flag lowercase 'nul' too."
+    }
+  ]
+}

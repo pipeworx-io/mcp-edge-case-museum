@@ -1,0 +1,55 @@
+{
+  "id": "single-letter-surname-fails-min-length",
+  "title": "A 'name must be at least 2 characters' rule rejects a real, single-letter surname",
+  "category": "names-addresses",
+  "assumption": "No legitimate name is only one character long.",
+  "input": {
+    "display": "\"O\" (a one-letter surname)",
+    "description": "A form validator's minimum-length rule applied to a surname field."
+  },
+  "what_goes_wrong": "A person whose surname genuinely is a single letter is rejected by a length check that has nothing to do with whether the name is real — it's purely a guess about how short a name 'should' be.",
+  "why": "Single-character surnames exist in multiple naming traditions (for example, several Korean surnames romanize to a single letter), and a minimum-length rule has no way to distinguish a genuinely short name from a placeholder like \"x\" someone typed to get past the form. The rule enforces an assumption about length that is simply false for this input, not a check that catches bad data.",
+  "affects": [
+    "any 'minimum name length' validator"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "def validate_name(name):\n    if len(name) < 2:\n        raise ValueError(\"name must be at least 2 characters\")\n    return True\n\nfor name in [\"Yu\", \"O\"]:\n    try:\n        print(name, validate_name(name))\n    except ValueError as e:\n        print(name, \"rejected:\", e)\n",
+      "expected_output": "Yu True\nO rejected: name must be at least 2 characters",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "function validateName(name) {\n  if (name.length < 2) throw new Error(\"name must be at least 2 characters\");\n  return true;\n}\nfor (const name of [\"Yu\", \"O\"]) {\n  try {\n    console.log(name, validateName(name));\n  } catch (e) {\n    console.log(name, \"rejected:\", e.message);\n  }\n}\n",
+      "expected_output": "Yu true\nO rejected: name must be at least 2 characters",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Don't impose a minimum name length unless you have a specific, documented reason to; if you need to catch empty or placeholder input, check for that directly (empty string, all the same character) rather than guessing a length threshold.",
+  "related": [
+    "mononym-fails-first-last-required"
+  ],
+  "sources": [
+    {
+      "title": "Patrick McKenzie: Falsehoods Programmers Believe About Names",
+      "url": "https://www.kalzumeus.com/2010/06/17/falsehoods-programmers-believe-about-names/"
+    }
+  ],
+  "tags": [
+    "names",
+    "validation",
+    "forms",
+    "length validation",
+    "i18n"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "O"
+      ],
+      "relation": "no_crash",
+      "note": "A real single-letter surname should not be rejected purely on length."
+    }
+  ]
+}

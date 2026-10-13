@@ -1,0 +1,70 @@
+{
+  "id": "csv-semicolon-delimited-european-excel",
+  "title": "A \"CSV\" from a European Excel is delimited with semicolons, and a comma-delimiter parser reads the whole line as one field",
+  "category": "parsing",
+  "assumption": "A file with a .csv extension is comma-delimited.",
+  "input": {
+    "display": "name;age\\nAda;30\\n",
+    "description": "A CSV exported by Excel configured for a locale (most of continental Europe) where the decimal comma is the default decimal separator - Excel then uses a semicolon as the list/field separator instead of a comma, to avoid colliding with decimal commas in numeric fields, while still naming the file .csv."
+  },
+  "what_goes_wrong": "Parsing this file with a comma-delimited reader produces one single-column row per line - `['name;age']`, `['Ada;30']` - instead of the two columns the file actually has; every downstream column lookup by index or name silently gets the wrong (and only) field.",
+  "why": "\".csv\" names a family of delimited-text formats, not a guarantee of which character is the delimiter. When Excel on Windows saves as CSV it uses the operating system's regional \"list separator\" setting, and in locales whose decimal separator is a comma (most of continental Europe) that setting defaults to a semicolon, so numbers like 3,5 don't collide with the field separator. The file still gets the same \".csv\" extension. A parser that hardcodes `delimiter=\",\"` has no way to detect this from the extension alone.",
+  "affects": [
+    "python",
+    "javascript"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "import csv, io\ntext = 'name;age\\nAda;30\\n'\nprint(list(csv.reader(io.StringIO(text))))\nprint(list(csv.reader(io.StringIO(text), delimiter=\";\")))\n",
+      "expected_output": "[['name;age'], ['Ada;30']]\n[['name', 'age'], ['Ada', '30']]",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "const text = \"name;age\\nAda;30\\n\";\nconst commaDelimited = text.trim().split(\"\\n\").map(line => line.split(\",\"));\nconst semicolonDelimited = text.trim().split(\"\\n\").map(line => line.split(\";\"));\nconsole.log(JSON.stringify(commaDelimited));\nconsole.log(JSON.stringify(semicolonDelimited));\n",
+      "expected_output": "[[\"name;age\"],[\"Ada;30\"]]\n[[\"name\",\"age\"],[\"Ada\",\"30\"]]",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Sniff the delimiter instead of hardcoding it - Python's `csv.Sniffer().sniff(sample)` guesses it from a sample of the file, or check the first line for the most frequent of `,`, `;`, and `\\t` before choosing a reader. Let users confirm the detected delimiter on upload rather than failing silently.",
+  "related": [
+    "csv-utf8-bom-first-header"
+  ],
+  "sources": [
+    {
+      "title": "Python docs: csv.Sniffer",
+      "url": "https://docs.python.org/3/library/csv.html#csv.Sniffer"
+    },
+    {
+      "title": "RFC 4180: Common Format and MIME Type for Comma-Separated Values (CSV) Files",
+      "url": "https://www.rfc-editor.org/rfc/rfc4180"
+    }
+  ],
+  "tags": [
+    "csv",
+    "upload",
+    "parsing",
+    "i18n",
+    "validation"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "name;age\nAda;30\n"
+      ],
+      "relation": "returns",
+      "expected": [
+        [
+          "name",
+          "age"
+        ],
+        [
+          "Ada",
+          "30"
+        ]
+      ],
+      "note": "A CSV-parsing function that auto-detects the delimiter should return two columns for this semicolon-delimited file, not one column containing the whole line."
+    }
+  ]
+}

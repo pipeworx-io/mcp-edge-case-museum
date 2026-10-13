@@ -1,0 +1,54 @@
+{
+  "id": "address-with-no-street-number",
+  "title": "A rural route, a PO box, and a named lot all have an address with no street number at all",
+  "category": "names-addresses",
+  "assumption": "Every valid street address begins with a number.",
+  "input": {
+    "display": "\"Rural Route 2\", \"PO Box 445\", \"Lot 7 Orchard Lane\"",
+    "description": "An address-line validator that requires the first token to be numeric, used on a shipping or billing form."
+  },
+  "what_goes_wrong": "Entirely legitimate, deliverable addresses are rejected because they don't start with digits — rural routes, PO boxes, and named-lot rural properties are all real addressing conventions with no house number.",
+  "why": "A leading street number is just one of several addressing schemes in common use; postal systems also deliver to rural route numbers, post office boxes, and named lots or stations that never had a house number assigned at all. A regex that hard-requires a leading digit encodes 'suburban street address' as if it were the only valid addressing format, when it is only one of several.",
+  "affects": [
+    "any address validator requiring a leading street number"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "import re\npattern = re.compile(r\"^\\d+\\s\")\nfor addr in [\"Rural Route 2\", \"PO Box 445\", \"Lot 7 Orchard Lane\"]:\n    print(addr, bool(pattern.match(addr)))\n",
+      "expected_output": "Rural Route 2 False\nPO Box 445 False\nLot 7 Orchard Lane False",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "const pattern = /^\\d+\\s/;\nfor (const addr of [\"Rural Route 2\", \"PO Box 445\", \"Lot 7 Orchard Lane\"]) {\n  console.log(addr, pattern.test(addr));\n}\n",
+      "expected_output": "Rural Route 2 false\nPO Box 445 false\nLot 7 Orchard Lane false",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Don't require an address to start with a number; if you need structured address fields, make the house-number field optional and let 'address line 1' accept free text, which is how postal services themselves treat it.",
+  "related": [
+    "house-number-suffix-collapsed-by-digit-extraction"
+  ],
+  "sources": [
+    {
+      "title": "Michael Tandy: Falsehoods Programmers Believe About Addresses",
+      "url": "https://www.mjt.me.uk/posts/falsehoods-programmers-believe-about-addresses/"
+    }
+  ],
+  "tags": [
+    "addresses",
+    "validation",
+    "forms",
+    "parsing"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "PO Box 445"
+      ],
+      "relation": "no_crash",
+      "note": "A PO Box is a deliverable address with no street number; your form should accept it."
+    }
+  ]
+}

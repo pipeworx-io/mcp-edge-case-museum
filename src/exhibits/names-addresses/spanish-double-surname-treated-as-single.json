@@ -1,0 +1,55 @@
+{
+  "id": "spanish-double-surname-treated-as-single",
+  "title": "Taking the last word of \"Lucía Ferrer Montalbán\" as 'the' surname drops a whole surname",
+  "category": "names-addresses",
+  "assumption": "A person has exactly one surname, which is whichever word comes last in their full name.",
+  "input": {
+    "display": "\"Lucía Ferrer Montalbán\" (an invented name)",
+    "description": "A full-name field for someone from a Spanish-naming-convention culture, where a person carries both a paternal and a maternal surname, split with a 'last word = surname' heuristic."
+  },
+  "what_goes_wrong": "The system records \"Montalbán\" as the surname and silently drops \"Ferrer\", the first (traditionally paternal) surname, which breaks any later attempt to match this person against relatives who share it, or against official documents that list both.",
+  "why": "In Spain and most of Spanish-speaking Latin America, a person normally carries TWO surnames, both legally part of the name and neither a middle name; traditionally the first is the father's first surname and the second is the mother's first surname (Spain has let parents choose the order since 1999). A 'last word is the surname' rule, which works for a simple two-part name, discards the first of the two surnames because it has no way to know that this particular name has three meaningful parts, not two.",
+  "affects": [
+    "any 'last word is the surname' name parser applied to a spanish-convention full name"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "full = \"Luc\\u00eda Ferrer Montalb\\u00e1n\"\nparts = full.split(\" \")\ngiven, surname = parts[0], parts[-1]\nprint(\"given:\", given, \"| recorded surname:\", surname, \"| dropped:\", parts[1:-1])\n",
+      "expected_output": "given: Lucía | recorded surname: Montalbán | dropped: ['Ferrer']",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "const full = \"Luc\\u00eda Ferrer Montalb\\u00e1n\";\nconst parts = full.split(\" \");\nconst given = parts[0];\nconst surname = parts[parts.length - 1];\nconsole.log(\"given:\", given, \"| recorded surname:\", surname, \"| dropped:\", parts.slice(1, -1));\n",
+      "expected_output": "given: Lucía | recorded surname: Montalbán | dropped: [ 'Ferrer' ]",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Don't assume a fixed name structure derived from word position; ask for given name(s) and surname(s) as separate, explicitly-labeled fields, and allow more than one surname.",
+  "related": [
+    "split-surname-on-last-space-loses-particle"
+  ],
+  "sources": [
+    {
+      "title": "Patrick McKenzie: Falsehoods Programmers Believe About Names",
+      "url": "https://www.kalzumeus.com/2010/06/17/falsehoods-programmers-believe-about-names/"
+    }
+  ],
+  "tags": [
+    "names",
+    "forms",
+    "validation",
+    "database",
+    "i18n"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "Lucía Ferrer Montalbán"
+      ],
+      "relation": "no_crash",
+      "note": "Check whether your surname extraction keeps both 'Ferrer' and 'Montalbán', or silently drops one."
+    }
+  ]
+}

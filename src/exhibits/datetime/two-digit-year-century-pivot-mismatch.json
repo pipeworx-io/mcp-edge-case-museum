@@ -1,0 +1,49 @@
+{
+  "id": "two-digit-year-century-pivot-mismatch",
+  "title": "The same two-digit year string lands in a different century depending on which language parses it",
+  "category": "datetime",
+  "assumption": "A two-digit year like '68' means the same calendar year no matter which system parses the date string it's embedded in.",
+  "input": {
+    "display": "\"01/01/68\" parsed by Python's strptime(\"%m/%d/%y\") vs JavaScript's legacy Date(string) parser",
+    "description": "A date string with a 2-digit year (common in older CSV exports, legacy forms, and some locale-formatted dates) passed between a Python backend and a JavaScript frontend."
+  },
+  "what_goes_wrong": "The same string \"01/01/68\" is read as 2068 by Python and 1968 by Node.js, so a date passed between the two silently moves a century; years 00-49 and 69-99 agree, hiding the bug.",
+  "why": "Python's strptime with %y follows the POSIX convention: two-digit years 00-68 become 2000-2068 and 69-99 become 1969-1999. V8's legacy (non-ISO) Date parser, used by Node.js and Chrome, pivots at 50 instead: 00-49 become 2000-2049 and 50-99 become 1950-1999. So for the nineteen years 50 through 68 the two runtimes disagree by exactly a century, while every other two-digit year agrees, which is why the bug survives casual testing. ECMA-262 leaves parsing of non-ISO date strings implementation-defined, so other JavaScript engines are free to choose differently again.",
+  "affects": [
+    "python",
+    "javascript"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "from datetime import datetime\n\nfor s in (\"01/01/49\", \"01/01/50\", \"01/01/68\", \"01/01/69\"):\n    print(s, \"->\", datetime.strptime(s, \"%m/%d/%y\").year)\n",
+      "expected_output": "01/01/49 -> 2049\n01/01/50 -> 2050\n01/01/68 -> 2068\n01/01/69 -> 1969",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "for (const s of ['01/01/49', '01/01/50', '01/01/68', '01/01/69']) {\n  console.log(s, '->', new Date(s).getFullYear());\n}\n",
+      "expected_output": "01/01/49 -> 2049\n01/01/50 -> 1950\n01/01/68 -> 1968\n01/01/69 -> 1969",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Never rely on implicit two-digit-year parsing across a language boundary. Require 4-digit years at every system edge, or, if you must accept 2-digit years, write and apply your own explicit pivot rule identically on both sides.",
+  "related": [
+    "century-leap-year-1900-not-leap"
+  ],
+  "sources": [
+    {
+      "title": "Python docs: strftime/strptime format codes (%y)",
+      "url": "https://docs.python.org/3/library/datetime.html#strftime-and-strptime-format-codes"
+    },
+    {
+      "title": "ECMA-262: Date.parse (non-ISO formats are implementation-defined)",
+      "url": "https://tc39.es/ecma262/#sec-date.parse"
+    }
+  ],
+  "tags": [
+    "date parsing",
+    "validation"
+  ],
+  "test_cases": []
+}

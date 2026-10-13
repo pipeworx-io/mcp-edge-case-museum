@@ -1,0 +1,58 @@
+{
+  "id": "bool-is-int-subclass-dict-key-collision",
+  "title": "{1: \"a\", True: \"b\"} has only one key in Python, because True equals 1",
+  "category": "integers",
+  "assumption": "A boolean key and an integer key in a dictionary are always distinct entries, since booleans and integers are different types.",
+  "input": {
+    "display": "{1: \"a\", True: \"b\"}  ->  {1: \"b\"}, a dict with exactly one entry",
+    "description": "Building a lookup table or counter dict keyed partly by integers and partly by booleans from mixed data (e.g. a CSV or JSON blob where some flag fields were coerced to 0/1 and others stayed as true/false)."
+  },
+  "what_goes_wrong": "Inserting entries keyed `1` and `True` (or `0` and `False`) into the same dict overwrites one with the other instead of creating two entries, silently losing data with no error.",
+  "why": "`bool` is a subclass of `int` in Python (`class bool(int)`), specifically so that `True` and `1` behave identically wherever an integer is expected. As a consequence, `True == 1` is `True`, and `hash(True) == hash(1)`, and Python dicts (and sets) de-duplicate keys by equality-and-hash together -- so `1` and `True` are, as far as a dict is concerned, the exact same key, and whichever value was assigned last wins.",
+  "affects": [
+    "python"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "print(isinstance(True, int), True == 1, hash(True) == hash(1))\nprint(True + True)  # arithmetic coercion, unsurprising on its own\nd = {1: \"a\", True: \"b\"}\nprint(d, len(d))\n",
+      "expected_output": "True True True\n2\n{1: 'b'} 1",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "// JS booleans are not a number subtype: object keys coerce to strings, and\n// Map uses SameValueZero (no type coercion), so 1 and true never collide.\nconst obj = { 1: \"a\", true: \"b\" };\nconsole.log(obj, Object.keys(obj));\nconst m = new Map([[1, \"a\"], [true, \"b\"]]);\nconsole.log(m.size, [...m.keys()]);\nconsole.log(true + true); // arithmetic coercion still matches Python here\n",
+      "expected_output": "{ '1': 'a', true: 'b' } [ '1', 'true' ]\n2 [ 1, true ]\n2",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Never key a dict/set by a mix of booleans and small integers if you need them distinct; normalize flag values to a single consistent type (e.g. always `int`, or always `bool`) before using them as keys.",
+  "related": [],
+  "sources": [
+    {
+      "title": "Python docs: bool -- Boolean Type",
+      "url": "https://docs.python.org/3/library/stdtypes.html#boolean-type-bool"
+    },
+    {
+      "title": "Python docs: Built-in Types -- Mapping Types (dict)",
+      "url": "https://docs.python.org/3/library/stdtypes.html#mapping-types-dict"
+    }
+  ],
+  "tags": [
+    "database",
+    "validation",
+    "json"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        [
+          1,
+          true
+        ]
+      ],
+      "relation": "no_crash",
+      "note": "Any dict-building code keyed by mixed int/bool values should decide explicitly whether 1 and True are the same key."
+    }
+  ]
+}

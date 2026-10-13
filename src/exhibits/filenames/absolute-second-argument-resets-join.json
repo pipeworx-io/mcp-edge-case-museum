@@ -1,0 +1,62 @@
+{
+  "id": "absolute-second-argument-resets-join",
+  "title": "os.path.join(\"/srv/uploads\", \"/etc/passwd\") returns \"/etc/passwd\" — the base directory just vanishes",
+  "category": "filenames",
+  "assumption": "Passing an absolute-looking string as the second argument to a join function is harmless, since the first argument is the 'real' base.",
+  "input": {
+    "display": "os.path.join(\"/srv/uploads\", \"/etc/passwd\")",
+    "description": "A filename field a user can make start with \"/\" — a tar entry name, a form field never checked for a leading slash, or a URL path segment decoded before joining."
+  },
+  "what_goes_wrong": "If the user-controlled piece itself looks absolute, Python's join discards the trusted base entirely and returns the attacker-controlled absolute path unchanged — a complete, silent takeover of the result, with no `..` traversal syntax required at all.",
+  "why": "Per the Python docs, os.path.join treats any argument that looks absolute as resetting the path: every previously joined component is discarded and joining continues from that absolute component onward. Node's path.join does NOT implement this reset — it treats the leading slash of a later argument as just another separator and concatenates everything — so the identical call in Node keeps the base directory intact. path.resolve, however, DOES implement the Python-style reset, because resolve is documented to process its arguments right-to-left until it has built an absolute path, stopping the moment one argument is itself absolute.",
+  "affects": [
+    "python os.path.join (resets on an absolute argument)",
+    "node path.resolve (resets on an absolute argument)",
+    "node path.join (does NOT reset — differs from Python's join)"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "import os.path\nprint(os.path.join(\"/srv/uploads\", \"/etc/passwd\"))\n",
+      "expected_output": "/etc/passwd",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "import path from 'node:path';\nconsole.log(\"join:\", path.join(\"/srv/uploads\", \"/etc/passwd\"));\nconsole.log(\"resolve:\", path.resolve(\"/srv/uploads\", \"/etc/passwd\"));\n",
+      "expected_output": "join: /srv/uploads/etc/passwd\nresolve: /etc/passwd",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Never pass a user-controlled string straight into join/resolve as if it were just a filename; reject any value that starts with a path separator (or a drive letter on Windows) before it ever reaches a join call.",
+  "related": [
+    "path-join-escapes-the-base-directory"
+  ],
+  "sources": [
+    {
+      "title": "Python docs: os.path.join",
+      "url": "https://docs.python.org/3/library/os.path.html#os.path.join"
+    },
+    {
+      "title": "Node.js docs: path.resolve",
+      "url": "https://nodejs.org/api/path.html#pathresolvepaths"
+    }
+  ],
+  "tags": [
+    "filename",
+    "path",
+    "security",
+    "validation",
+    "upload"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "/srv/uploads",
+        "/etc/passwd"
+      ],
+      "relation": "no_crash",
+      "note": "Check whether your join/resolve call discards the base directory on an absolute second argument — the two most common path libraries disagree with each other here."
+    }
+  ]
+}

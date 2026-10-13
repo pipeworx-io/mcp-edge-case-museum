@@ -1,0 +1,49 @@
+{
+  "id": "js-date-field-overflow-rollover",
+  "title": "new Date(2024, 1, 30) silently becomes March 1, not an error",
+  "category": "datetime",
+  "assumption": "Passing an out-of-range day (or month) to a date constructor either gets rejected or clamped to the nearest valid value.",
+  "input": {
+    "display": "new Date(2024, 1, 30)  -- February only has 29 days in 2024",
+    "description": "Date arithmetic done by hand on year/month/day components, e.g. 'last day of next month minus a few days', or a date picker that lets a day number outlive the month the user is also changing."
+  },
+  "what_goes_wrong": "Code computing a date by incrementing a day-of-month field without checking the month's length doesn't throw and doesn't clamp -- it quietly rolls over into the next month entirely, so 'February 30th' becomes 'March 1st' with no signal anything went wrong.",
+  "why": "The ECMA-262 Date constructor specifies that out-of-range field values are normalized by carrying the excess into the next larger field, rather than being validated and rejected. Day 30 is one past February's last day in 2024 (the 29th, since 2024 is a leap year), so the extra day carries into March and the result is March 1. The same arithmetic in Python's `date()` constructor raises `ValueError` instead, because Python validates each field against the actual calendar rather than normalizing it.",
+  "affects": [
+    "javascript"
+  ],
+  "repros": [
+    {
+      "language": "javascript",
+      "code": "const d = new Date(2024, 1, 30); // month 1 = February (0-indexed), day 30\nconsole.log(d.getFullYear(), d.getMonth(), d.getDate());\n// Also overflows the month field itself:\nconst d2 = new Date(2024, 13, 1); // month 13 doesn't exist\nconsole.log(d2.getFullYear(), d2.getMonth(), d2.getDate());\n",
+      "expected_output": "2024 2 1\n2025 1 1",
+      "verified_with": "Node.js v22.22.2"
+    },
+    {
+      "language": "python",
+      "code": "from datetime import date\n\ntry:\n    date(2024, 2, 30)\nexcept ValueError as e:\n    print(\"Python raises instead of rolling over:\", e)\n",
+      "expected_output": "Python raises instead of rolling over: day 30 must be in range 1..29 for month 2 in year 2024",
+      "verified_with": "Python 3.14.2"
+    }
+  ],
+  "fix": "Never construct a Date from hand-computed year/month/day components without first validating the day against that month's actual length (and the month against 0-11); if you want 'last valid day of the month' semantics, compute it explicitly rather than relying on overflow behavior.",
+  "related": [
+    "century-leap-year-1900-not-leap",
+    "age-calculator-feb29-birthday-crash-vs-silent"
+  ],
+  "sources": [
+    {
+      "title": "ECMA-262: Date constructor / MakeDay normalization",
+      "url": "https://tc39.es/ecma262/#sec-date-constructor"
+    },
+    {
+      "title": "MDN: Date() constructor",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/Date"
+    }
+  ],
+  "tags": [
+    "date parsing",
+    "validation"
+  ],
+  "test_cases": []
+}

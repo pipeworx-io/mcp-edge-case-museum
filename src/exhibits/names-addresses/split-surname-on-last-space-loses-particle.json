@@ -1,0 +1,59 @@
+{
+  "id": "split-surname-on-last-space-loses-particle",
+  "title": "Splitting a name on the last space doesn't find the surname — it finds the last WORD",
+  "category": "names-addresses",
+  "assumption": "The text after the last space in a full name is the surname.",
+  "input": {
+    "display": "\"Joost van der Berg\" (an invented name)",
+    "description": "A 'full name' text field being split into given/surname for a database or a form, using the common 'last word = surname' heuristic."
+  },
+  "what_goes_wrong": "The surname field ends up holding just \"Berg\", and \"van der\" — which is part of the actual family name \"van der Berg\" — gets silently folded into the given-name field instead.",
+  "why": "Splitting on the last whitespace boundary only knows about whitespace, not about which words belong to the family name. Dutch, German, and other surnames routinely include lowercase particles (van, der, von, de) that are grammatically and legally part of the surname, not separate given names, and a position-based split has no way to know where the surname actually starts.",
+  "affects": [
+    "any 'split full name on whitespace' form handler",
+    "python str.rsplit",
+    "javascript lastIndexOf-based split"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "def naive_split(full_name):\n    given, surname = full_name.rsplit(\" \", 1)\n    return given, surname\n\nprint(naive_split(\"Joost van der Berg\"))\n",
+      "expected_output": "('Joost van der', 'Berg')",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "function naiveSplit(fullName) {\n  const i = fullName.lastIndexOf(\" \");\n  return [fullName.slice(0, i), fullName.slice(i + 1)];\n}\nconsole.log(naiveSplit(\"Joost van der Berg\"));\n",
+      "expected_output": "[ 'Joost van der', 'Berg' ]",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Collect given-name and family-name as separate fields entered directly by the person instead of inferring the split from word position; if you must infer it, maintain an explicit list of known lowercase surname particles to fold into the family-name side.",
+  "related": [
+    "mononym-fails-first-last-required",
+    "spanish-double-surname-treated-as-single"
+  ],
+  "sources": [
+    {
+      "title": "Patrick McKenzie: Falsehoods Programmers Believe About Names",
+      "url": "https://www.kalzumeus.com/2010/06/17/falsehoods-programmers-believe-about-names/"
+    }
+  ],
+  "tags": [
+    "names",
+    "forms",
+    "validation",
+    "database",
+    "i18n",
+    "display"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "Joost van der Berg"
+      ],
+      "relation": "no_crash",
+      "note": "Check whether your surname field comes out as 'Berg' or 'van der Berg' — most systems get this wrong."
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "id": "bigint-number-mixing-typeerror",
+  "title": "10n + 5 throws TypeError instead of just giving you 15",
+  "category": "integers",
+  "assumption": "Any two things that look like numbers can be added together directly.",
+  "input": {
+    "display": "10n + 5",
+    "description": "Mixing a value that came from a BigInt-returning source (e.g. a large parsed id, `Number.MAX_SAFE_INTEGER` workaround, or a library that returns BigInt) with an ordinary numeric literal elsewhere in arithmetic."
+  },
+  "what_goes_wrong": "Introducing a single `BigInt` value into a codebase that otherwise uses plain `number` breaks at the first arithmetic operation that mixes the two, with a runtime `TypeError` rather than a silent or compile-time-caught issue.",
+  "why": "`BigInt` and `Number` are deliberately kept as separate, non-interoperable types in JavaScript: implicitly coercing one to the other would either lose a BigInt's exactness (converting to Number) or silently change comparison/arithmetic semantics, so the spec requires an explicit conversion (`BigInt(5)` or `Number(10n)`) before the two can be combined with `+`, `-`, `*`, etc. (Comparison operators like `<` and `==` are a deliberate exception and do work across the two types.)",
+  "affects": [
+    "javascript"
+  ],
+  "repros": [
+    {
+      "language": "javascript",
+      "code": "try {\n  console.log(10n + 5);\n} catch (e) {\n  console.log(e.constructor.name + ':', e.message);\n}\nconsole.log(10n + BigInt(5));\nconsole.log(10n < 20); // comparison operators DO mix the types\n",
+      "expected_output": "TypeError: Cannot mix BigInt and other types, use explicit conversions\n15n\ntrue",
+      "verified_with": "Node.js v22.22.2"
+    },
+    {
+      "language": "python",
+      "code": "# Python has only one built-in integer type, so there is nothing to mix:\n# int already has unlimited precision, no separate 'big integer' type exists.\nprint(10 + 5, type(10 + 5))\n",
+      "expected_output": "15 <class 'int'>",
+      "verified_with": "Python 3.14.2"
+    }
+  ],
+  "fix": "Convert explicitly at the boundary where a value becomes a BigInt (or stays a Number) and keep the two types from mixing in arithmetic; don't let a single BigInt-returning call silently propagate into number-typed code.",
+  "related": [
+    "max-safe-integer-plus-one-equals-plus-two"
+  ],
+  "sources": [
+    {
+      "title": "MDN: BigInt",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/BigInt"
+    },
+    {
+      "title": "ECMA-262: BigInt operators",
+      "url": "https://tc39.es/ecma262/#sec-ecmascript-language-expressions"
+    }
+  ],
+  "tags": [
+    "id",
+    "parsing",
+    "validation"
+  ],
+  "test_cases": []
+}

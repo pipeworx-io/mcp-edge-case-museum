@@ -1,0 +1,58 @@
+{
+  "id": "null-surname-coerced-to-null-value",
+  "title": "A surname that is literally the word \"Null\" gets cleaned away to an actual null",
+  "category": "names-addresses",
+  "assumption": "A string-cleaning step that treats the text 'null' as a sign of missing data is harmless.",
+  "input": {
+    "display": "\"Null\" (a real surname)",
+    "description": "A 'sanitize this field' helper applied to a last-name input, written to catch forms that leak the literal word null/NULL as placeholder text for an empty field."
+  },
+  "what_goes_wrong": "A person whose actual surname is Null has their name replaced with an actual missing value, because the cleaning function cannot tell the difference between the placeholder string and the real data.",
+  "why": "Some input pipelines add a defensive check (if the trimmed, lowercased field equals the text \"null\", treat it as empty) to guard against a template or export rendering the literal word when a field is unset. That check is a string comparison with no awareness that \"Null\" is also a real, if uncommon, surname, so it deletes a correct answer precisely because it looks like the sentinel. People with that surname have publicly described forms and systems rejecting their name or treating it as missing.",
+  "affects": [
+    "any 'treat the string null as empty' sanitizer"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "def clean_field(name):\n    if not name or name.strip().lower() == \"null\":\n        return None\n    return name.strip()\n\nprint(clean_field(\"Null\"))\nprint(clean_field(\"O'Null\"))\n",
+      "expected_output": "None\nO'Null",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "function cleanField(name) {\n  if (!name || name.toLowerCase() === \"null\") return null;\n  return name;\n}\nconsole.log(cleanField(\"Null\"));\nconsole.log(cleanField(\"O'Null\"));\n",
+      "expected_output": "null\nO'Null",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Never infer 'this field is empty' from its text content matching a sentinel word; use an explicit null/empty marker from the data layer (an actual null, not the string \"null\") so a real value can never collide with it.",
+  "related": [],
+  "sources": [
+    {
+      "title": "WIRED (2015): Hello, I'm Mr. Null. My Name Makes Me Invisible to Computers",
+      "url": "https://www.wired.com/2015/11/null/"
+    },
+    {
+      "title": "Patrick McKenzie: Falsehoods Programmers Believe About Names",
+      "url": "https://www.kalzumeus.com/2010/06/17/falsehoods-programmers-believe-about-names/"
+    }
+  ],
+  "tags": [
+    "names",
+    "validation",
+    "forms",
+    "database",
+    "parsing"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "Null"
+      ],
+      "relation": "returns",
+      "expected": "Null",
+      "note": "A sanitizer that strips the literal word 'null' will fail this for a real person named Null."
+    }
+  ]
+}

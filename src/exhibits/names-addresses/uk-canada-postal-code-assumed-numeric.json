@@ -1,0 +1,55 @@
+{
+  "id": "uk-canada-postal-code-assumed-numeric",
+  "title": "A 'postal code must be 5 digits' check rejects every UK and Canadian address",
+  "category": "names-addresses",
+  "assumption": "A postal/zip code is always a short string of digits.",
+  "input": {
+    "display": "\"SW1A 1AA\" (UK), \"K1A 0B1\" (Canada)",
+    "description": "A postal code field validated against a fixed numeric pattern, written with only US ZIP codes in mind."
+  },
+  "what_goes_wrong": "Perfectly valid UK and Canadian postal codes are rejected outright because they mix letters and digits and don't match a 5-digit pattern at all.",
+  "why": "US ZIP codes happen to be exactly 5 digits, but that's a US-specific format, not a property of 'postal codes' in general. UK postcodes (like SW1A 1AA) and Canadian postal codes (like K1A 0B1) are alphanumeric by design, with letter-digit structures that a 5-digit-only regex has no way to match.",
+  "affects": [
+    "any postal-code validator hard-coded to \\d{5}"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "import re\npattern = re.compile(r\"^\\d{5}$\")\nfor code in [\"02134\", \"SW1A 1AA\", \"K1A 0B1\"]:\n    print(code, bool(pattern.match(code)))\n",
+      "expected_output": "02134 True\nSW1A 1AA False\nK1A 0B1 False",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "const pattern = /^\\d{5}$/;\nfor (const code of [\"02134\", \"SW1A 1AA\", \"K1A 0B1\"]) {\n  console.log(code, pattern.test(code));\n}\n",
+      "expected_output": "02134 true\nSW1A 1AA false\nK1A 0B1 false",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Validate postal codes per-country using that country's actual format (or accept any reasonably short alphanumeric string if the country isn't known), never a single 5-digit pattern applied worldwide.",
+  "related": [
+    "us-zip-code-leading-zero-lost-as-integer"
+  ],
+  "sources": [
+    {
+      "title": "Michael Tandy: Falsehoods Programmers Believe About Addresses",
+      "url": "https://www.mjt.me.uk/posts/falsehoods-programmers-believe-about-addresses/"
+    }
+  ],
+  "tags": [
+    "addresses",
+    "validation",
+    "forms",
+    "i18n",
+    "database"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "SW1A 1AA"
+      ],
+      "relation": "no_crash",
+      "note": "A valid UK postcode should be accepted by your postal-code field."
+    }
+  ]
+}

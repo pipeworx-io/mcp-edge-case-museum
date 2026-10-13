@@ -1,0 +1,49 @@
+{
+  "id": "python-unbounded-int-vs-fixed-width-wrap",
+  "title": "Python's int never overflows -- until you explicitly ask for a fixed-width one",
+  "category": "integers",
+  "assumption": "An integer type has some maximum size, and adding to it eventually overflows or errors.",
+  "input": {
+    "display": "struct.pack(\"i\", 2**31) raises; ctypes.c_int32(2**31).value wraps to -2147483648",
+    "description": "Serializing a Python int into a fixed-width binary format (a network protocol, a C-compatible struct, a file format) where the field is a 32-bit signed integer, after the value has grown past what that field can hold."
+  },
+  "what_goes_wrong": "Code that works fine for years because Python's `int` just keeps growing starts failing (or, worse, silently wraps to a negative number) the moment that same value has to be packed into a fixed-width field for serialization, networking, or C interop -- and which of those two happens depends entirely on which API you used to do the packing.",
+  "why": "Python's built-in `int` is arbitrary-precision: it has no fixed bit width and never overflows on its own. Fixed-width behavior only appears when you explicitly convert to one -- `struct.pack` with a format like `\"i\"` (the platform's C `int`, signed 32-bit on all mainstream platforms) validates the range and raises `struct.error` if the value doesn't fit, while `ctypes.c_int32` instead performs a real two's-complement modulo-2^32 wraparound, silently producing a negative value with no error at all. The two standard-library tools for 'give this a fixed width' disagree on whether out-of-range is an error or a wraparound.",
+  "affects": [
+    "python"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "import struct\nimport ctypes\n\ntry:\n    struct.pack(\"i\", 2**31)\nexcept struct.error as e:\n    print(\"struct.pack raises:\", e)\n\nprint(\"ctypes.c_int32 wraps silently:\", ctypes.c_int32(2**31).value)\nprint(\"plain python int, unaffected:\", 2**31)\n",
+      "expected_output": "struct.pack raises: 'i' format requires -2147483648 <= number <= 2147483647\nctypes.c_int32 wraps silently: -2147483648\nplain python int, unaffected: 2147483648",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "// JS has no arbitrary-precision integer type by default (Number is a double),\n// but a typed array shows the same silent-wrap behavior as ctypes.c_int32.\nconst a = new Int32Array(1);\na[0] = 2 ** 31;\nconsole.log(\"Int32Array wraps silently:\", a[0]);\n",
+      "expected_output": "Int32Array wraps silently: -2147483648",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "When serializing a Python int into a fixed-width field, validate the range yourself first (or use `struct.pack` and handle the `struct.error`) rather than reaching for `ctypes`, whose wraparound is silent and easy to miss in a code review.",
+  "related": [
+    "bitwise-32-bit-truncation"
+  ],
+  "sources": [
+    {
+      "title": "Python docs: struct -- Format Characters",
+      "url": "https://docs.python.org/3/library/struct.html#format-characters"
+    },
+    {
+      "title": "Python docs: ctypes -- Fundamental data types",
+      "url": "https://docs.python.org/3/library/ctypes.html#fundamental-data-types"
+    }
+  ],
+  "tags": [
+    "validation",
+    "parsing",
+    "database"
+  ],
+  "test_cases": []
+}

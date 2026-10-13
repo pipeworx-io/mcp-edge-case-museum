@@ -1,0 +1,66 @@
+{
+  "id": "byte-order-caps-before-lowercase",
+  "title": "\"Zebra\" sorts before \"apple\" by default",
+  "category": "sorting",
+  "assumption": "Sorting a list of names or words alphabetically puts them in the order a person would expect: apple, then zebra.",
+  "input": {
+    "display": "[\"Zebra\", \"apple\", \"Mango\", \"banana\"]",
+    "description": "A list of user-entered names, tags, or product titles with inconsistent capitalization, sorted with the language's default string comparison for a dropdown or report."
+  },
+  "what_goes_wrong": "The default sort returns [\"Mango\", \"Zebra\", \"apple\", \"banana\"] — every capitalized word sorts before every lowercase word, so \"Zebra\" ends up before \"apple\" even though no human alphabetizing this list would ever do that.",
+  "why": "Python's default string comparison orders characters by Unicode code point and JavaScript's by UTF-16 code unit; for ASCII letters both are the same as byte order. The uppercase letters A-Z (U+0041-U+005A) all come before the lowercase letters a-z (U+0061-U+007A), so a word starting with a capital sorts before every word starting with a lowercase ASCII letter, because the comparison is settled at the first character where the two strings differ and here that is the first letter.",
+  "affects": [
+    "python",
+    "javascript"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "words = [\"Zebra\", \"apple\", \"Mango\", \"banana\"]\nprint(sorted(words))\nprint(\"Zebra\" < \"apple\")\n",
+      "expected_output": "['Mango', 'Zebra', 'apple', 'banana']\nTrue",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "const words = [\"Zebra\", \"apple\", \"Mango\", \"banana\"];\nconsole.log(words.slice().sort());\nconsole.log(\"Zebra\" < \"apple\");\n",
+      "expected_output": "[ 'Mango', 'Zebra', 'apple', 'banana' ]\ntrue",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Sort case-insensitively for anything a human will read: key on the lowercased (or casefolded) string, or use a locale-aware comparator (Intl.Collator in JS; Python has no case-insensitive built-in comparator, so pass key=str.casefold to sorted()).",
+  "related": [
+    "accented-letters-sort-after-z",
+    "case-insensitive-sort-lower-vs-casefold"
+  ],
+  "sources": [
+    {
+      "title": "Unicode Standard: Code Charts, Basic Latin block",
+      "url": "https://www.unicode.org/charts/PDF/U0000.pdf"
+    },
+    {
+      "title": "Python docs: Comparisons (str ordering is by code point)",
+      "url": "https://docs.python.org/3/reference/expressions.html#comparisons"
+    },
+    {
+      "title": "ECMA-262: Array.prototype.sort, default SortCompare",
+      "url": "https://tc39.es/ecma262/#sec-array.prototype.sort"
+    }
+  ],
+  "tags": [
+    "sorting",
+    "comparison",
+    "names",
+    "display"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "Zebra",
+        "apple"
+      ],
+      "relation": "returns",
+      "expected": false,
+      "note": "their_function(a, b) as a display-order \"a sorts before b\" test should return false: apple belongs before Zebra. Raw `a < b` returns true here, which is the trap."
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "id": "parseint-number-argument-scientific-notation",
+  "title": "parseInt(0.0000005) returns 5, not 0",
+  "category": "integers",
+  "assumption": "parseInt() reads the digits of the number you gave it, in the order you wrote them.",
+  "input": {
+    "display": "parseInt(0.0000005)  -- note: the NUMBER 0.0000005, not the string \"0.0000005\"",
+    "description": "Calling parseInt on a small decimal number directly (rather than on a string), e.g. while sanitizing a computed fractional value into an integer."
+  },
+  "what_goes_wrong": "`parseInt(0.0000005)` returns 5 -- not 0, and not an error -- because the number gets stringified to scientific notation before parseInt ever sees a digit of the original decimal.",
+  "why": "`parseInt` only accepts a string; when given a `number`, JavaScript first coerces it to a string via the Number-to-String algorithm. That algorithm switches to exponent notation for any magnitude below 1e-6 (and at or above 1e21), so 0.000001 stringifies as \"0.000001\" but 0.0000005 becomes \"5e-7\", not \"0.0000005\". `parseInt` then reads the string from the start, parsing digits until it hits the first character that isn't part of an integer -- which is \"e\" -- so it returns 5, the only digit it saw before stopping. Calling `parseInt(\"0.0000005\")` on the literal string instead returns 0, because the string parse stops at the \".\". The large end bites the same way: `parseInt(1e21)` is 1, because 1e21 stringifies as \"1e+21\".",
+  "affects": [
+    "javascript"
+  ],
+  "repros": [
+    {
+      "language": "javascript",
+      "code": "console.log((0.0000005).toString());       // what parseInt actually sees\nconsole.log(parseInt(0.0000005));           // number argument -> stringified first\nconsole.log(parseInt(\"0.0000005\"));         // string argument -> no scientific notation\n",
+      "expected_output": "5e-7\n5\n0",
+      "verified_with": "Node.js v22.22.2"
+    },
+    {
+      "language": "python",
+      "code": "# Python's int() refuses a float string outright rather than guessing a prefix.\ntry:\n    int(\"0.0000005\")\nexcept ValueError as e:\n    print(\"ValueError:\", e)\nprint(int(0.0000005))  # int() of an actual float truncates toward zero instead\n",
+      "expected_output": "ValueError: invalid literal for int() with base 10: '0.0000005'\n0",
+      "verified_with": "Python 3.14.2"
+    }
+  ],
+  "fix": "Never pass a `number` directly to `parseInt`; convert deliberately with `Math.trunc()`/`Math.floor()` for numbers, and reserve `parseInt` for strings whose format you've already validated.",
+  "related": [
+    "parseint-stops-at-first-invalid-char-vs-number"
+  ],
+  "sources": [
+    {
+      "title": "MDN: parseInt()",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/parseInt"
+    },
+    {
+      "title": "ECMA-262: Number::toString",
+      "url": "https://tc39.es/ecma262/#sec-numeric-types-number-tostring"
+    }
+  ],
+  "tags": [
+    "parsing",
+    "validation"
+  ],
+  "test_cases": []
+}

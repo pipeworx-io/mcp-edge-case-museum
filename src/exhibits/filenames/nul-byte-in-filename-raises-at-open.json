@@ -1,0 +1,60 @@
+{
+  "id": "nul-byte-in-filename-raises-at-open",
+  "title": "A filename with an embedded NUL byte sails through every path function, then blows up the moment you open it",
+  "category": "filenames",
+  "assumption": "If os.path.join / path.join didn't raise an error, the filename is safe to use.",
+  "input": {
+    "display": "\"a\\u0000b\" (the letter a, a NUL byte, the letter b)",
+    "description": "A filename decoded from untrusted bytes (a multipart upload, a binary protocol field) that was never validated as a 'reasonable' string before being treated as a filename."
+  },
+  "what_goes_wrong": "String-only path functions accept the NUL byte without complaint and happily build a joined path containing it; the error only appears later, at the actual filesystem call, in a different part of the codebase than where the bad input was first accepted.",
+  "why": "os.path.join and path.join are pure string operations — they concatenate and, in Node's case, normalize separators, but neither inspects the byte content for anything the OS might reject. The OS filesystem call layer represents paths as NUL-terminated C strings, so an embedded NUL byte would truncate or corrupt the path at the syscall level; both Python's open() and Node's fs functions guard against this themselves and raise before making the call, rather than letting the OS ever see a truncated string.",
+  "affects": [
+    "python os.path.join (no validation)",
+    "node path.join (no validation)",
+    "python open() (raises ValueError)",
+    "node fs (raises ERR_INVALID_ARG_VALUE)"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "import os.path\njoined = os.path.join(\"a\\x00b\", \"c\")\nprint(\"join accepted it:\", repr(joined))\ntry:\n    open(\"a\\x00b\")\nexcept ValueError as e:\n    print(\"open() raised:\", e)\n",
+      "expected_output": "join accepted it: 'a\\x00b/c'\nopen() raised: embedded null byte",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "import path from 'node:path';\nimport fs from 'node:fs';\nconst joined = path.join(\"a\\0b\", \"c\");\nconsole.log(\"join accepted it:\", JSON.stringify(joined));\ntry {\n  fs.readFileSync(\"a\\0b\");\n} catch (e) {\n  console.log(\"fs raised:\", e.code);\n}\n",
+      "expected_output": "join accepted it: \"a\\u0000b/c\"\nfs raised: ERR_INVALID_ARG_VALUE",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Validate filenames for control characters (including NUL) at the point you accept them, not at the point you happen to open them — the path-building layer in between will not catch it for you.",
+  "related": [],
+  "sources": [
+    {
+      "title": "Python docs: File Names, Command-Line Arguments, and Environment Variables",
+      "url": "https://docs.python.org/3/library/os.html#file-names-command-line-arguments-and-environment-variables"
+    },
+    {
+      "title": "Node.js docs: fs — file paths",
+      "url": "https://nodejs.org/api/fs.html#file-paths"
+    }
+  ],
+  "tags": [
+    "filename",
+    "path",
+    "validation",
+    "upload",
+    "security"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "a\u0000b"
+      ],
+      "relation": "raises",
+      "note": "Your file-open code should raise here, not silently truncate the filename at the NUL byte."
+    }
+  ]
+}

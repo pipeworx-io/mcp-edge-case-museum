@@ -1,0 +1,60 @@
+{
+  "id": "url-urlparse-never-raises-on-garbage",
+  "title": "Python's urlparse doesn't raise on garbage - \"not a url\" parses \"successfully\" into an empty scheme and host",
+  "category": "parsing",
+  "assumption": "If a string isn't a valid URL, the URL-parsing function you call will raise an error, so \"it didn't throw\" is good evidence the input was a real URL.",
+  "input": {
+    "display": "not a url",
+    "description": "User-submitted text in a field that is supposed to be a URL (a profile link, a webhook target, a redirect destination), validated with `urlparse` and a check like `if result.netloc: ...` or simply `try: urlparse(x) except: reject`."
+  },
+  "what_goes_wrong": "`urlparse(\"not a url\")` does not raise - it returns a `ParseResult` with empty `scheme` and `netloc` and the whole input shoved into `.path`. JavaScript's `new URL(\"not a url\")` does the opposite: it throws `TypeError: Invalid URL` immediately, because the WHATWG algorithm requires an absolute URL (or a base to resolve against) and fails loudly otherwise.",
+  "why": "Python's `urllib.parse.urlparse` implements RFC 3986's generic syntax as a permissive, almost mechanical split on delimiter characters (`://`, `@`, `:`, `/`, `?`, `#`) - if the expected delimiters for scheme/netloc aren't present, it doesn't fail, it just leaves those fields empty and puts everything into whichever component comes last in the fallback order (`path`). It was designed to parse URI *references* (which may be relative, schemeless fragments) permissively, not to validate that a string is a complete, dereferenceable URL. The WHATWG `URL` constructor is deliberately the opposite: it exists specifically to parse (and validate) a resolvable URL, so it throws on anything that doesn't resolve to one. (It is not literally exception-free: an unbalanced IPv6 bracket such as `http://[::1` raises ValueError, and reading `.port` raises for an out-of-range port - but ordinary non-URL text goes straight through.)",
+  "affects": [
+    "python"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "from urllib.parse import urlparse\nr = urlparse(\"not a url\")\nprint(r)\nprint(bool(r.scheme), bool(r.netloc))\n",
+      "expected_output": "ParseResult(scheme='', netloc='', path='not a url', params='', query='', fragment='')\nFalse False",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "try {\n  const u = new URL(\"not a url\");\n  console.log(\"parsed\", u.href);\n} catch (e) {\n  console.log(\"THROWS:\", e.message);\n}\n",
+      "expected_output": "THROWS: Invalid URL",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Never treat \"urlparse didn't raise\" as proof of a valid URL in Python. Explicitly check that both `scheme` is one of the schemes you accept (e.g. `http`/`https`) and `netloc` is non-empty, or use a stricter validator before trusting the result.",
+  "related": [
+    "url-backslash-treated-as-slash-whatwg",
+    "url-userinfo-trusted-looking-host"
+  ],
+  "sources": [
+    {
+      "title": "Python docs: urllib.parse",
+      "url": "https://docs.python.org/3/library/urllib.parse.html"
+    },
+    {
+      "title": "WHATWG URL Standard: URL parsing failures",
+      "url": "https://url.spec.whatwg.org/#url-parsing"
+    }
+  ],
+  "tags": [
+    "url",
+    "parsing",
+    "validation",
+    "forms",
+    "security"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "not a url"
+      ],
+      "relation": "no_crash",
+      "note": "their_is_valid_url(text) must explicitly reject this - checking only whether urlparse() raised is not enough, since urlparse never raises on this input."
+    }
+  ]
+}

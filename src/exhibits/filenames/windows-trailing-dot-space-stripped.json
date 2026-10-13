@@ -1,0 +1,77 @@
+{
+  "id": "windows-trailing-dot-space-stripped",
+  "title": "\"report.\" and \"report \" are the same file as \"report\" on Windows, but not to your path library",
+  "category": "filenames",
+  "assumption": "Two filename strings that differ only by a trailing dot or space refer to two different files.",
+  "input": {
+    "display": "\"report.\" and \"report \" (both compared against \"report\")",
+    "description": "A filename built by concatenating a title with a trailing space, or a name ending in a stray period from a stripped extension."
+  },
+  "what_goes_wrong": "A dedup or uniqueness check built on string comparison treats \"report.\" and \"report\" as different names, but Win32 silently drops the trailing dot/space when it actually creates the file, so the second create overwrites the first, or the app can't find the file it thinks it just wrote.",
+  "why": "Win32 normalizes almost every path it is given (the same step GetFullPathName performs), and one rule of that normalization is that when the path does not end in a separator, trailing periods and spaces are removed from the last component. Only paths that start with the \\\\?\\ prefix skip that step, which is why a file named \"report.\" can exist on NTFS yet be unreachable by ordinary programs. Pure path libraries perform no such rewrite; PureWindowsPath and path.win32 preserve the trailing characters exactly and report the strings as different, the opposite of what Windows will do with them.",
+  "affects": [
+    "windows win32 path normalization (strips trailing dots and spaces unless the path starts with \\\\?\\)",
+    "pathlib.PureWindowsPath (no stripping)",
+    "path.win32 (no stripping)"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "from pathlib import PureWindowsPath\na = PureWindowsPath(\"C:/Users/me/report.\")\nb = PureWindowsPath(\"C:/Users/me/report\")\nc = PureWindowsPath(\"C:/Users/me/report \")\nprint(a.name, \"==\", b.name, \"?\", a == b)\nprint(repr(c.name), \"==\", repr(b.name), \"?\", c == b)\n",
+      "expected_output": "report. == report ? False\n'report ' == 'report' ? False",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "import path from 'node:path';\nconst a = path.win32.basename(\"C:/Users/me/report.\");\nconst b = path.win32.basename(\"C:/Users/me/report\");\nconst c = path.win32.basename(\"C:/Users/me/report \");\nconsole.log(a, \"==\", b, \"?\", a === b);\nconsole.log(JSON.stringify(c), \"==\", JSON.stringify(b), \"?\", c === b);\n",
+      "expected_output": "report. == report ? false\n\"report \" == \"report\" ? false",
+      "verified_with": "Node.js v22.22.2"
+    },
+    {
+      "language": "windows",
+      "status": "documented",
+      "note": "Creating \"report.\" or \"report \" through the normal Win32 CreateFile path creates or opens \"report\": normalization drops the trailing dot or space before the filesystem sees the name, so both strings collide with a plain \"report\".",
+      "source": "https://learn.microsoft.com/en-us/dotnet/standard/io/file-path-formats"
+    }
+  ],
+  "fix": "Strip trailing dots and spaces from each user-supplied name component yourself before comparing, storing or creating it, matching what Win32 normalization will do anyway; or reject such names outright.",
+  "related": [
+    "case-insensitive-filesystem-pure-path-mismatch"
+  ],
+  "sources": [
+    {
+      "title": "Microsoft Learn: File path formats on Windows systems (Trim characters)",
+      "url": "https://learn.microsoft.com/en-us/dotnet/standard/io/file-path-formats"
+    },
+    {
+      "title": "Microsoft Learn: Naming Files, Paths, and Namespaces",
+      "url": "https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file"
+    }
+  ],
+  "tags": [
+    "filename",
+    "path",
+    "validation",
+    "upload",
+    "security",
+    "windows"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "report.",
+        "report"
+      ],
+      "relation": "equal",
+      "note": "A filename-key function meant to be safe on Windows should map these to the same key, because Windows will create the same file for both."
+    },
+    {
+      "inputs": [
+        "report ",
+        "report"
+      ],
+      "relation": "equal",
+      "note": "Same for a trailing space."
+    }
+  ]
+}

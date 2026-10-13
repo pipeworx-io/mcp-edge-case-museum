@@ -1,0 +1,62 @@
+{
+  "id": "max-safe-integer-plus-two",
+  "title": "2**53 + 1 is a different number in Python than it is once it becomes a float",
+  "category": "float-money",
+  "assumption": "Adding 1 to a very large whole number (like an invoice ID or a total expressed in minor units) always produces a distinguishable result.",
+  "input": {
+    "display": "2**53 + 1 as a Python int vs as a JS Number/float",
+    "description": "An invoice total or running ledger balance expressed in cents that has grown past 9,007,199,254,740,992 (Number.MAX_SAFE_INTEGER) - implausible for a single invoice, plausible for a cumulative all-time platform total - and then passed through a float or JSON.parse in JavaScript."
+  },
+  "what_goes_wrong": "In Python, `2**53 + 1 == 2**53` is False - they're exact, distinct integers. The moment either is converted to (or ever existed only as) an IEEE-754 double, `float(2**53 + 1) == float(2**53)` is True: both round to the identical double, because doubles only have 53 bits of mantissa and the gap between representable values at that magnitude is already 2.",
+  "why": "A double has a 52-bit stored mantissa (53 bits of precision with the implicit leading bit), so it can represent every integer exactly only up to 2**53; above that, the spacing between representable doubles grows (it's 2 between 2**53 and 2**54, then 4, and so on), so 2**53 + 1 has no exact double representation and rounds to the nearest representable value, 2**53 itself. Python's native `int` is arbitrary precision and unaffected, which is exactly why this only bites once a number crosses into a float - via JSON, via JavaScript's single Number type, via a database driver that returns a float, etc.",
+  "affects": [
+    "javascript",
+    "any IEEE-754 double used to hold an integer id or count"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "a = 2**53\nb = 2**53 + 1\nprint(a == b)\nprint(float(a) == float(b))\n",
+      "expected_output": "False\nTrue",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "const a = 2 ** 53;\nconst b = 2 ** 53 + 1;\nconsole.log(a === b);\nconsole.log(Number.isSafeInteger(a), Number.isSafeInteger(b));\nconsole.log(Number.MAX_SAFE_INTEGER);\n",
+      "expected_output": "true\nfalse false\n9007199254740991",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Never put an invoice ID, account balance, or any value that might exceed 2**53 (~9 quadrillion) through JavaScript's Number type or through JSON if the source has more precision - use a string for the ID/balance in JSON and parse it with a BigInt or arbitrary-precision type on the receiving end.",
+  "related": [
+    "float-anchor-0-1-plus-0-2",
+    "json-big-integer-precision-loss"
+  ],
+  "sources": [
+    {
+      "title": "MDN: Number.MAX_SAFE_INTEGER",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/MAX_SAFE_INTEGER"
+    },
+    {
+      "title": "ECMA-262: Number.isSafeInteger",
+      "url": "https://tc39.es/ecma262/#sec-number.issafeinteger"
+    }
+  ],
+  "tags": [
+    "money",
+    "accounting",
+    "invoice",
+    "id",
+    "database"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        9007199254740992,
+        9007199254740993
+      ],
+      "relation": "not_equal",
+      "note": "their_function(x) that stores or compares large integer ids/totals must still tell 9007199254740992 and 9007199254740993 apart afterward; routing them through a float/JS Number makes them identical."
+    }
+  ]
+}

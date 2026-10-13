@@ -1,0 +1,62 @@
+{
+  "id": "intl-number-format-de-de-roundtrip-misparsed",
+  "title": "Format a price for Germany, then parseFloat it back, and 1234.56 becomes 1.234",
+  "category": "float-money",
+  "assumption": "A number you formatted for display with Intl.NumberFormat can be read back with parseFloat to recover the same value.",
+  "input": {
+    "display": "parseFloat(new Intl.NumberFormat(\"de-DE\").format(1234.56))",
+    "description": "A price formatted for a German user as \"1.234,56\" (period as thousands separator, comma as decimal separator) that later gets fed back into the same parsing code path used for US-formatted input, e.g. a form field pre-filled with a locale-formatted value and then re-parsed on submit."
+  },
+  "what_goes_wrong": "`new Intl.NumberFormat(\"de-DE\").format(1234.56)` correctly produces the German-formatted string \"1.234,56\" - but `parseFloat(\"1.234,56\")` reads that back as `1.234`, not `1234.56`: it treats the German thousands-separating period as a decimal point and stops at the comma.",
+  "why": "`Intl.NumberFormat` is locale-aware in one direction only: it formats a number according to the target locale's conventions (in de-DE, \".\" groups thousands and \",\" is the decimal mark). `parseFloat`, by contrast, is not locale-aware at all - it only ever understands JavaScript's own numeric literal syntax, where \".\" is always the decimal point. Feeding a de-DE-formatted string into a locale-blind parser silently reinterprets the grouping separator as the decimal point, truncating the value by roughly three orders of magnitude.",
+  "affects": [
+    "javascript"
+  ],
+  "repros": [
+    {
+      "language": "javascript",
+      "code": "const formatted = new Intl.NumberFormat(\"de-DE\").format(1234.56);\nconsole.log(formatted);\nconsole.log(parseFloat(formatted));\n",
+      "expected_output": "1.234,56\n1.234",
+      "verified_with": "Node.js v22.22.2"
+    },
+    {
+      "language": "python",
+      "code": "# Python's stdlib has no locale-formatting function comparable to Intl.NumberFormat\n# without opting into the system locale database; the bug is demonstrated directly\n# by parsing a German-formatted string the same naive way.\nformatted = \"1.234,56\"\ntry:\n    print(float(formatted))\nexcept ValueError as e:\n    print(\"ValueError:\", e)\n",
+      "expected_output": "ValueError: could not convert string to float: '1.234,56'",
+      "verified_with": "Python 3.14.2"
+    }
+  ],
+  "fix": "Never round-trip a locale-formatted display string through a locale-blind parser. Keep the underlying numeric value (not its formatted string) as the source of truth, and if you must parse locale-formatted input, use `Intl.NumberFormat(locale).formatToParts()` to discover that locale's actual group/decimal characters first.",
+  "related": [
+    "parsefloat-comma-thousands-separator"
+  ],
+  "sources": [
+    {
+      "title": "MDN: Intl.NumberFormat",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/NumberFormat"
+    },
+    {
+      "title": "MDN: parseFloat()",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/parseFloat"
+    }
+  ],
+  "tags": [
+    "money",
+    "price",
+    "currency",
+    "i18n",
+    "forms",
+    "validation"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "1.234,56",
+        "de-DE"
+      ],
+      "relation": "returns",
+      "expected": 1234.56,
+      "note": "A their_parse_price(str, locale) function given the de-DE-formatted \"1.234,56\" should return 1234.56, not the 1.234 that locale-blind parseFloat gives."
+    }
+  ]
+}

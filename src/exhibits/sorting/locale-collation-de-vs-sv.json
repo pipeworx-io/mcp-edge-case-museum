@@ -1,0 +1,54 @@
+{
+  "id": "locale-collation-de-vs-sv",
+  "title": "The same three letters sort in a different order in German than in Swedish",
+  "category": "sorting",
+  "assumption": "Locale-aware sorting just fixes the \"accents sort wrong\" problem the same way for every language.",
+  "input": {
+    "display": "[\"z\", \"\\u00e4\", \"a\"].sort with localeCompare(..., \"de\") vs localeCompare(..., \"sv\")",
+    "description": "A single sort function applied to the same three-letter list, parameterized only by a BCP 47 locale tag — e.g. a user-preference-driven \"sort my contacts\" feature."
+  },
+  "what_goes_wrong": "localeCompare with locale \"de\" (German) sorts the list as [\"a\", \"\\u00e4\", \"z\"] — ä treated as a minor variant of a, placed right next to it. localeCompare with locale \"sv\" (Swedish) sorts the exact same list as [\"a\", \"z\", \"\\u00e4\"] — ä treated as its own letter, placed after z. There is no single \"correct\" locale-aware order; it depends entirely on which locale you pass.",
+  "why": "German collation in CLDR (the data behind ICU and JavaScript's Intl) uses the Unicode default ordering with no tailoring: ä is an a with an accent difference, so it sorts right next to a, which matches German dictionary order (DIN 5007-1). CLDR also has a German phonebook variant (de-u-co-phonebk) that sorts ä as \"ae\". Swedish treats å, ä and ö as separate letters at the end of the alphabet, after z, and the Swedish CLDR collation tailors them there. Both are correct for their own language; a collator has to be told which one to use through its locale argument, and a wrong or missing locale applies one language's rules to another's text. Python's sorted() in the repro is plain code-point order, which happens to agree with Swedish here only because ä (U+00E4) is numerically after z.",
+  "affects": [
+    "javascript"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "words = [\"z\", \"\\u00e4\", \"a\"]\nprint(sorted(words))\n",
+      "expected_output": "['a', 'z', 'ä']",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "const words = [\"z\", \"\\u00e4\", \"a\"];\nconsole.log(words.slice().sort((a, b) => a.localeCompare(b, \"de\")));\nconsole.log(words.slice().sort((a, b) => a.localeCompare(b, \"sv\")));\nconsole.log(words.slice().sort());\n",
+      "expected_output": "[ 'a', 'ä', 'z' ]\n[ 'a', 'z', 'ä' ]\n[ 'a', 'z', 'ä' ]",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Always pass the user's actual locale to the collator rather than relying on a default; never assume one European locale's alphabetical order generalizes to another's. JavaScript ships this via Intl.Collator/localeCompare with a locale argument; Python's standard library has no bundled Unicode collation tables, so matching this behavior requires the system's installed locale data (unreliable across machines) or a third-party ICU binding.",
+  "related": [
+    "accented-letters-sort-after-z"
+  ],
+  "sources": [
+    {
+      "title": "Unicode Technical Standard #10: Unicode Collation Algorithm",
+      "url": "https://www.unicode.org/reports/tr10/"
+    },
+    {
+      "title": "MDN: Intl.Collator",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/Collator"
+    },
+    {
+      "title": "CLDR collation charts",
+      "url": "https://www.unicode.org/cldr/charts/latest/collation/index.html"
+    }
+  ],
+  "tags": [
+    "sorting",
+    "comparison",
+    "names",
+    "i18n",
+    "display"
+  ]
+}

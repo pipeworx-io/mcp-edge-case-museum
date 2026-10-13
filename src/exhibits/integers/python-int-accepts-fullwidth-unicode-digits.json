@@ -1,0 +1,56 @@
+{
+  "id": "python-int-accepts-fullwidth-unicode-digits",
+  "title": "int(\"４２\") works -- those are fullwidth Unicode digits, not the ASCII characters they look like",
+  "category": "integers",
+  "assumption": "int() only accepts the ASCII digits 0-9.",
+  "input": {
+    "display": "int(\"\\uff14\\uff12\") == 42  (U+FF14 FULLWIDTH DIGIT FOUR, U+FF12 FULLWIDTH DIGIT TWO)",
+    "description": "User input copy-pasted from a source using fullwidth characters (common in East Asian text contexts, or a sneaky/naughty-string test input), or any other Unicode script's decimal digits (Arabic-Indic, Devanagari, etc.) submitted to a form field."
+  },
+  "what_goes_wrong": "A validator that checks `s.isdigit()` or `re.fullmatch(r'\\d+', s)` and then calls `int(s)` happily accepts fullwidth, Arabic-Indic, Devanagari and other Unicode digits (both checks are Unicode-aware for str), while a check anchored to `[0-9]` rejects the same input that `int()` would accept -- so two layers of the same form can disagree about what a number is.",
+  "why": "Python's `int()` (and `float()`) accepts any character with the Unicode general category Nd ('decimal digit'), which covers fullwidth forms (U+FF10-FF19), Arabic-Indic, Devanagari and dozens of other scripts' 0-9, and maps each to its decimal value; it also strips any Unicode whitespace around the number. This is documented, deliberate internationalisation in the string-to-number conversion, not in the language's source parser: `x = ４２` in source code is a SyntaxError. Python's regex `\\d` is likewise Unicode-aware for str patterns unless you pass `re.ASCII`. And the sets do not line up: `'²'.isdigit()` is True for superscript two, but it is not Nd, so `int('²')` raises.",
+  "affects": [
+    "python"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "import re\nfullwidth = \"\\uff14\\uff12\"  # looks like \"42\"\nprint(repr(fullwidth), \"->\", int(fullwidth))\nprint(\"matches [0-9]+:\", bool(re.fullmatch(r\"[0-9]+\", fullwidth)))\nprint(\"matches \\\\d+:\", bool(re.fullmatch(r\"\\d+\", fullwidth)), \"| with re.ASCII:\", bool(re.fullmatch(r\"\\d+\", fullwidth, re.ASCII)))\nsup = \"\\u00b2\"  # SUPERSCRIPT TWO\ntry:\n    int(sup)\nexcept ValueError as e:\n    print(repr(sup), \"isdigit():\", sup.isdigit(), \"| int() ->\", e)",
+      "expected_output": "'４２' -> 42\nmatches [0-9]+: False\nmatches \\d+: True | with re.ASCII: False\n'²' isdigit(): True | int() -> invalid literal for int() with base 10: '²'",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "// Number() and parseInt() do NOT extend digit recognition past ASCII 0-9,\n// so the same fullwidth string fails to parse at all in JavaScript.\nconst fullwidth = \"\\uff14\\uff12\";\nconsole.log(Number(fullwidth), parseInt(fullwidth, 10));\n",
+      "expected_output": "NaN NaN",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "If you need ASCII digits only, say so explicitly: `s.isascii() and s.isdigit()`, `re.fullmatch(r'[0-9]+', s)` or `re.fullmatch(r'\\d+', s, re.ASCII)`, and run `int()` on the same string you validated. If you want to accept other scripts' digits, normalise them deliberately (e.g. `str(int(s))`) before storing or passing the value to systems that only understand ASCII.",
+  "related": [
+    "python-int-accepts-underscores-and-whitespace"
+  ],
+  "sources": [
+    {
+      "title": "Unicode Standard: General Category Values (Nd = Decimal Number)",
+      "url": "https://www.unicode.org/reports/tr44/#General_Category_Values"
+    },
+    {
+      "title": "Python docs: int() constructor",
+      "url": "https://docs.python.org/3/library/functions.html#int"
+    },
+    {
+      "title": "Python docs: numeric types (int/float accept digits with the Unicode Nd property)",
+      "url": "https://docs.python.org/3/library/stdtypes.html#numeric-types-int-float-complex"
+    }
+  ],
+  "tags": [
+    "parsing",
+    "validation",
+    "i18n",
+    "forms",
+    "normalization",
+    "security"
+  ],
+  "test_cases": []
+}

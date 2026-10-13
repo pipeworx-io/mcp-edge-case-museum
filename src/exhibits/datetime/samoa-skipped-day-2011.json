@@ -1,0 +1,50 @@
+{
+  "id": "samoa-skipped-day-2011",
+  "title": "December 30, 2011 does not exist on the calendar in Samoa",
+  "category": "datetime",
+  "assumption": "Every calendar date between two dates that both exist must itself exist.",
+  "input": {
+    "display": "Pacific/Apia: local calendar goes from 2011-12-29 directly to 2011-12-31 -- Dec 30, 2011 was skipped entirely",
+    "description": "Date-range iteration, 'days since' calculations, or calendar/report generation for Samoa and a few other Pacific nations that moved across the International Date Line."
+  },
+  "what_goes_wrong": "Stepping through local days by adding 24 hours to an instant jumps straight from Dec 29 to Dec 31, 2011 in Samoa, while code that iterates naive calendar dates produces a Dec 30 row whose local times never happened -- and constructing one succeeds silently with the old -10:00 offset.",
+  "why": "Samoa moved from the east side of the International Date Line to the west side to align with its main trading partners (Australia and New Zealand), skipping Friday, December 30, 2011 entirely: the clock went from 23:59:59 on Thursday the 29th straight to 00:00:00 on Saturday the 31st. This was a one-time political decision recorded in the IANA tz database, not a recurring rule. zoneinfo does not refuse to construct a datetime for the skipped day -- like the DST spring-forward gap, it silently resolves it using the offset in effect just before the jump (UTC-10) rather than raising an error.",
+  "affects": [
+    "python",
+    "javascript"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "from zoneinfo import ZoneInfo\nfrom datetime import datetime\n\ntz = ZoneInfo(\"Pacific/Apia\")\nbefore = datetime(2011, 12, 29, 12, 0, tzinfo=tz)\nafter = datetime(2011, 12, 31, 12, 0, tzinfo=tz)\nskipped = datetime(2011, 12, 30, 12, 0, tzinfo=tz)  # the day that never happened\nprint(\"before:\", before, before.utcoffset())\nprint(\"after:\", after, after.utcoffset())\nprint(\"'skipped day' constructed anyway:\", skipped, skipped.utcoffset())\nprint(\"before -> after, real hours apart:\", (after.astimezone(ZoneInfo('UTC')) - before.astimezone(ZoneInfo('UTC'))).total_seconds() / 3600)\n",
+      "expected_output": "before: 2011-12-29 12:00:00-10:00 -1 day, 14:00:00\nafter: 2011-12-31 12:00:00+14:00 14:00:00\n'skipped day' constructed anyway: 2011-12-30 12:00:00-10:00 -1 day, 14:00:00\nbefore -> after, real hours apart: 24.0",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "const fmt = new Intl.DateTimeFormat('en-US', { timeZone: 'Pacific/Apia', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });\n// Walk hour by hour through the UTC window and watch the local calendar date jump.\nfor (let h = 8; h <= 11; h++) {\n  const t = Date.UTC(2011, 11, 30, h, 0, 0);\n  console.log(h, 'UTC on Dec 30 ->', fmt.format(new Date(t)));\n}\n",
+      "expected_output": "8 UTC on Dec 30 -> 12/29/2011, 22:00\n9 UTC on Dec 30 -> 12/29/2011, 23:00\n10 UTC on Dec 30 -> 12/31/2011, 00:00\n11 UTC on Dec 30 -> 12/31/2011, 01:00",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Never assume calendar dates are contiguous across arbitrary ranges for arbitrary zones; let the tz-aware library enumerate real local dates (or do the iteration in UTC and convert each instant to local for display) rather than looping over a naive date range.",
+  "related": [
+    "dst-spring-forward-nonexistent-time"
+  ],
+  "sources": [
+    {
+      "title": "IANA Time Zone Database",
+      "url": "https://www.iana.org/time-zones"
+    },
+    {
+      "title": "Python docs: zoneinfo",
+      "url": "https://docs.python.org/3/library/zoneinfo.html"
+    }
+  ],
+  "tags": [
+    "timezone",
+    "date parsing",
+    "scheduling"
+  ],
+  "test_cases": []
+}

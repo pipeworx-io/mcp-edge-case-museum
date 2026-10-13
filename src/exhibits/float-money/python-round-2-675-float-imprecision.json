@@ -1,0 +1,64 @@
+{
+  "id": "python-round-2-675-float-imprecision",
+  "title": "round(2.675, 2) is 2.67 in Python, not 2.68",
+  "category": "float-money",
+  "assumption": "round(x, 2) rounds a price to the nearest cent the way a calculator would, based on the decimal digits you wrote.",
+  "input": {
+    "display": "round(2.675, 2)",
+    "description": "Rounding a unit price quoted to three decimals, such as $2.675 from a supplier price list or a per-unit rate table, to the nearest cent before storing or displaying it."
+  },
+  "what_goes_wrong": "`round(2.675, 2)` returns 2.67, not 2.68, even though 2.675 looks exactly halfway between 2.67 and 2.68.",
+  "why": "The literal 2.675 is not exactly representable in IEEE-754 double; the nearest representable double is approximately 2.67499999999999982236..., which is strictly below the true halfway point. Python's round() rounds that actual stored value, so it correctly rounds down to 2.67 - the \"error\" is in the input's binary representation, not in round()'s rounding rule. This is the same mechanism as JavaScript's toFixed surprises, and it is independent of Python's round-half-to-even tie-breaking rule, because 2.67499999999999982236... isn't a tie to begin with.",
+  "affects": [
+    "python",
+    "any IEEE-754 double rounded by value rather than by decimal text"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "x = 2.675\nprint(round(x, 2))\nprint(f\"{x:.20f}\")\nimport decimal\nprint(decimal.Decimal(x))\n",
+      "expected_output": "2.67\n2.67499999999999982236\n2.67499999999999982236431605997495353221893310546875",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "const x = 2.675;\nconsole.log(Number(x.toFixed(2)));\nconsole.log(x.toFixed(20));\n",
+      "expected_output": "2.67\n2.67499999999999982236",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Build the number from a decimal string with decimal.Decimal(\"2.675\") instead of a float literal, and round that - Decimal preserves the exact decimal value, so round-half-even on it gives the answer a human expects. Or round integer cents directly, never a float dollar amount.",
+  "related": [
+    "tofixed-1-005-rounds-down-not-up",
+    "python-banker-rounding-vs-js-round-half-up",
+    "decimal-from-float-vs-string"
+  ],
+  "sources": [
+    {
+      "title": "Python docs: round()",
+      "url": "https://docs.python.org/3/library/functions.html#round"
+    },
+    {
+      "title": "Python docs: 15.1. Floating-Point Arithmetic: Issues and Limitations",
+      "url": "https://docs.python.org/3/tutorial/floatingpoint.html"
+    }
+  ],
+  "tags": [
+    "money",
+    "rounding",
+    "price",
+    "currency",
+    "invoice",
+    "accounting"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "2.675"
+      ],
+      "relation": "returns",
+      "expected": "2.68",
+      "note": "A price-rounding function given the exact decimal string \"2.675\" should round to \"2.68\" (round-half-up on the true decimal value); round(float(\"2.675\"), 2) in Python returns 2.67 instead."
+    }
+  ]
+}

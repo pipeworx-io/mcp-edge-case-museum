@@ -1,0 +1,67 @@
+{
+  "id": "float-anchor-0-1-plus-0-2",
+  "title": "0.1 + 0.2 comes out to 0.30000000000000004",
+  "category": "float-money",
+  "assumption": "Adding 0.1 and 0.2 gives exactly 0.3.",
+  "input": {
+    "display": "0.1 + 0.2 (two IEEE-754 double-precision literals)",
+    "description": "Any two decimal prices or quantities added directly, e.g. a $0.10 item plus a $0.20 item, or a 10% discount combined with a 20% discount."
+  },
+  "what_goes_wrong": "The sum prints as 0.30000000000000004 and `0.1 + 0.2 == 0.3` is false, so an equality check on a computed total silently fails.",
+  "why": "0.1 and 0.2 have no exact finite binary fraction (only sums of negative powers of two are exact in IEEE-754 double), so each literal is already rounded to the nearest representable double before the addition happens. Adding those two already-rounded values produces a result that is close to but not exactly the double closest to 0.3. This is a property of binary floating point itself (IEEE 754-2019), not a defect in any one language or runtime.",
+  "affects": [
+    "python",
+    "javascript",
+    "java",
+    "c",
+    "any IEEE-754 double"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "a = 0.1 + 0.2\nprint(a)\nprint(a == 0.3)\nprint(f\"{a:.20f}\")\n",
+      "expected_output": "0.30000000000000004\nFalse\n0.30000000000000004441",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "const a = 0.1 + 0.2;\nconsole.log(a);\nconsole.log(a === 0.3);\nconsole.log(a.toFixed(20));\n",
+      "expected_output": "0.30000000000000004\nfalse\n0.30000000000000004441",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Never compare floating-point money values for equality. Store money as integer minor units (cents) or use a fixed/decimal type (Python's decimal.Decimal, a cents-as-integer scheme in JS) for anything that gets added, subtracted, or compared.",
+  "related": [
+    "sum-ten-dimes-not-a-dollar",
+    "decimal-from-float-vs-string"
+  ],
+  "sources": [
+    {
+      "title": "Python docs: 15.1. Floating-Point Arithmetic: Issues and Limitations",
+      "url": "https://docs.python.org/3/tutorial/floatingpoint.html"
+    },
+    {
+      "title": "What Every Computer Scientist Should Know About Floating-Point Arithmetic (Goldberg, hosted by Oracle)",
+      "url": "https://docs.oracle.com/cd/E19957-01/806-3568/ncg_goldberg.html"
+    }
+  ],
+  "tags": [
+    "money",
+    "rounding",
+    "currency",
+    "accounting",
+    "price",
+    "comparison",
+    "validation"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        0.1,
+        0.2
+      ],
+      "relation": "no_crash",
+      "note": "A money-adding function should never assume their_function(0.1, 0.2) == 0.3 by direct float comparison; it should return an exact minor-unit integer or Decimal instead."
+    }
+  ]
+}

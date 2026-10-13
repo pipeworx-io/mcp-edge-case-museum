@@ -1,0 +1,64 @@
+{
+  "id": "tofixed-2-345-inconsistent-rounding",
+  "title": "2.345 rounds UP to 2.35 while 1.005 rounds DOWN to 1.00 - same \"x.xx5\" shape, opposite outcome",
+  "category": "float-money",
+  "assumption": "Any price ending in exactly half a cent (x.xx5) rounds the same way - either always up, or always down.",
+  "input": {
+    "display": "(2.345).toFixed(2) vs (1.005).toFixed(2)",
+    "description": "Two different prices that both look like a clean half-cent boundary, rounded to cents for display."
+  },
+  "what_goes_wrong": "2.345 rounds to \"2.35\" (up) but 1.005 rounds to \"1.00\" (down), even though both are written with the same \"value.value5\" shape - there is no way to predict which direction a given half-cent literal will round without checking its actual binary value.",
+  "why": "Neither 2.345 nor 1.005 is exactly representable in IEEE-754 double. 2.345's nearest double happens to be a hair above 2.345 (2.34500000000000019540...), so it's not actually a tie and rounds up; 1.005's nearest double happens to be a hair below 1.005 (1.00499999999999989341...), so it rounds down. Both languages round the true stored binary value, not the decimal text you typed, and whether a given literal lands slightly above or below its decimal value is essentially unpredictable without inspecting the bits.",
+  "affects": [
+    "javascript",
+    "python",
+    "any IEEE-754 double formatted by rounding its true binary value"
+  ],
+  "repros": [
+    {
+      "language": "javascript",
+      "code": "console.log((2.345).toFixed(2), (2.345).toFixed(20));\nconsole.log((1.005).toFixed(2), (1.005).toFixed(20));\n",
+      "expected_output": "2.35 2.34500000000000019540\n1.00 1.00499999999999989342",
+      "verified_with": "Node.js v22.22.2"
+    },
+    {
+      "language": "python",
+      "code": "for x in (2.345, 1.005):\n    print(f\"{x:.2f}\", f\"{x:.20f}\")\n",
+      "expected_output": "2.35 2.34500000000000019540\n1.00 1.00499999999999989342",
+      "verified_with": "Python 3.14.2"
+    }
+  ],
+  "fix": "Never treat float literals as exact decimal values for money. Round and store amounts as integer minor units, or construct a Decimal from the original decimal string (not from a float), so rounding operates on the number you actually meant.",
+  "related": [
+    "tofixed-1-005-rounds-down-not-up",
+    "python-round-2-675-float-imprecision"
+  ],
+  "sources": [
+    {
+      "title": "ECMA-262: Number.prototype.toFixed",
+      "url": "https://tc39.es/ecma262/#sec-number.prototype.tofixed"
+    },
+    {
+      "title": "Python docs: 15.1. Floating-Point Arithmetic: Issues and Limitations",
+      "url": "https://docs.python.org/3/tutorial/floatingpoint.html"
+    }
+  ],
+  "tags": [
+    "money",
+    "rounding",
+    "price",
+    "currency",
+    "invoice",
+    "display"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "1.005"
+      ],
+      "relation": "returns",
+      "expected": "1.01",
+      "note": "A money-rounding function that takes the exact decimal string \"1.005\" and rounds half-cents up should return \"1.01\" - if it instead parses to a float first and formats with toFixed, it will silently return \"1.00\"."
+    }
+  ]
+}

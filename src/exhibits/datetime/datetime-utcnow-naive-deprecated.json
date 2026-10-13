@@ -1,0 +1,39 @@
+{
+  "id": "datetime-utcnow-naive-deprecated",
+  "title": "datetime.utcnow() returns a value that is UTC in meaning but naive in type -- and is deprecated as of Python 3.12 because of it",
+  "category": "datetime",
+  "assumption": "A function named utcnow() returns a timezone-aware UTC timestamp.",
+  "input": {
+    "display": "datetime.utcnow().tzinfo is None",
+    "description": "Any codebase that used datetime.utcnow() to get 'the current UTC time' and then mixed the result with timezone-aware datetimes elsewhere."
+  },
+  "what_goes_wrong": "Code that calls `datetime.utcnow()` expecting a timezone-aware UTC timestamp gets a naive one instead, which then either silently gets treated as local time by something downstream (for example `.timestamp()`, which assumes a naive datetime is local time), or raises `TypeError` the moment it's compared against an aware datetime.",
+  "why": "`datetime.utcnow()` returns the current UTC time's wall-clock fields but deliberately attaches no tzinfo, making the result naive -- indistinguishable, by type, from a naive datetime that means local time or means nothing in particular. As of Python 3.12 it is deprecated and emits a `DeprecationWarning` (as does its sibling `datetime.utcfromtimestamp()`), because this mismatch between the function's name ('UTC') and its type (naive) has caused enough real bugs; on 3.11 and earlier it runs silently. The documented replacement is `datetime.now(timezone.utc)` (or `datetime.now(datetime.UTC)` on 3.11+), which returns an aware datetime that carries its UTC-ness in the object.",
+  "affects": [
+    "python"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "import warnings\nfrom datetime import datetime, timezone\n\nwith warnings.catch_warnings(record=True) as caught:\n    warnings.simplefilter(\"always\")\n    naive_utc = datetime.utcnow()\n    print(\"utcnow() tzinfo:\", naive_utc.tzinfo)\n    print(\"warning category raised:\", [w.category.__name__ for w in caught])\n\naware_utc = datetime.now(timezone.utc)\nprint(\"now(timezone.utc) tzinfo:\", aware_utc.tzinfo)\n",
+      "expected_output": "utcnow() tzinfo: None\nwarning category raised: ['DeprecationWarning']\nnow(timezone.utc) tzinfo: UTC",
+      "verified_with": "Python 3.14.2"
+    }
+  ],
+  "fix": "Use `datetime.now(timezone.utc)` instead of `datetime.utcnow()`; the result carries its own UTC-ness so it can be safely compared against, and converted from, any other aware datetime.",
+  "related": [
+    "python-naive-aware-comparison-typeerror"
+  ],
+  "sources": [
+    {
+      "title": "Python docs: datetime.utcnow (deprecated since 3.12)",
+      "url": "https://docs.python.org/3/library/datetime.html#datetime.datetime.utcnow"
+    }
+  ],
+  "tags": [
+    "timezone",
+    "timestamps",
+    "database"
+  ],
+  "test_cases": []
+}

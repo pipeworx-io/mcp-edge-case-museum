@@ -1,0 +1,67 @@
+{
+  "id": "leading-dash-filename-parsed-as-flag",
+  "title": "A file literally named \"-rf\" is not a filename to most command-line tools; it is two flags",
+  "category": "filenames",
+  "assumption": "A string you pass as a filename argument is always interpreted as a filename.",
+  "input": {
+    "display": "\"-rf\"",
+    "description": "A filename generated from user content (a title, a hashtag, a ticket id) that happens to start with a hyphen, then passed as a bare positional argument to a CLI tool or argument parser."
+  },
+  "what_goes_wrong": "A command built as `tool <filename>` with a filename of \"-rf\" is read by the tool's argument parser as options, not a filename. At best the tool errors out; in the classic case, `rm *` in a directory containing a file named \"-rf\" hands that name to rm as an argument, and GNU rm (which accepts options anywhere on the command line) reads it as its own -r and -f flags, so rm deletes the other matched directories recursively and without prompting.",
+  "why": "POSIX-style argument parsers decide whether a token is an option by its first character: a leading '-' (other than a lone \"-\", which conventionally means standard input) marks it as a flag, whatever the program meant that argument to be. Python's argparse applies this rule and refuses \"-rf\" as a positional, exiting with a usage error. Node's util.parseArgs, in its non-strict mode, silently parses it as the two boolean flags r and f and leaves no positional at all; in strict mode it throws on the unknown option. Both accept the same token as a filename once it follows a \"--\" end-of-options marker.",
+  "affects": [
+    "posix-style cli argument parsing (not limited to one language)",
+    "python argparse (rejects a leading-dash positional)",
+    "node util.parseArgs (non-strict: parses it as flags; strict: throws)"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "import argparse\nparser = argparse.ArgumentParser()\nparser.add_argument(\"filename\")\ntry:\n    args = parser.parse_args([\"-rf\"])\n    print(\"parsed filename:\", args.filename)\nexcept SystemExit as e:\n    print(\"argparse rejected it as a flag, exit code\", e.code)\n",
+      "expected_output": "argparse rejected it as a flag, exit code 2",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "import { parseArgs } from \"node:util\";\nconst loose = parseArgs({ args: [\"-rf\"], allowPositionals: true, strict: false });\nconsole.log(\"non-strict:\", JSON.stringify(loose));\ntry {\n  parseArgs({ args: [\"-rf\"], allowPositionals: true });\n} catch (e) {\n  console.log(\"strict:\", e.code);\n}\nconst escaped = parseArgs({ args: [\"--\", \"-rf\"], allowPositionals: true });\nconsole.log(\"after --:\", JSON.stringify(escaped.positionals));\n",
+      "expected_output": "non-strict: {\"values\":{\"r\":true,\"f\":true},\"positionals\":[]}\nstrict: ERR_PARSE_ARGS_UNKNOWN_OPTION\nafter --: [\"-rf\"]",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "When a value could plausibly start with '-', pass it after a literal `--` end-of-options marker wherever the tool supports one, or prefix it with `./` so it no longer starts with a dash.",
+  "related": [],
+  "sources": [
+    {
+      "title": "POSIX: Utility Syntax Guidelines (Guideline 10, the -- delimiter)",
+      "url": "https://pubs.opengroup.org/onlinepubs/9799919799/basedefs/V1_chap12.html"
+    },
+    {
+      "title": "GNU C Library: Program Argument Syntax Conventions",
+      "url": "https://www.gnu.org/software/libc/manual/html_node/Argument-Syntax.html"
+    },
+    {
+      "title": "Python docs: argparse",
+      "url": "https://docs.python.org/3/library/argparse.html"
+    },
+    {
+      "title": "Node.js docs: util.parseArgs",
+      "url": "https://nodejs.org/api/util.html#utilparseargsconfig"
+    }
+  ],
+  "tags": [
+    "filename",
+    "security",
+    "validation",
+    "upload",
+    "parsing"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "-rf"
+      ],
+      "relation": "no_crash",
+      "note": "A generated filename that starts with '-' needs an explicit escape before it reaches a CLI argument list, or it won't be read as a filename at all."
+    }
+  ]
+}

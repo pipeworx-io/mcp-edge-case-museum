@@ -1,0 +1,61 @@
+{
+  "id": "dotfile-has-no-extension",
+  "title": "\".bashrc\" has no extension at all, by the exact same rule that found \".gz\" in \"archive.tar.gz\"",
+  "category": "filenames",
+  "assumption": "Any filename starting with a dot has an extension equal to everything after that dot.",
+  "input": {
+    "display": "\".bashrc\"",
+    "description": "A Unix dotfile (.bashrc, .gitignore, .env) passed through the same extension-detection code used for ordinary uploads."
+  },
+  "what_goes_wrong": "A filter that rejects uploads without a 'recognized extension', or a viewer that picks a syntax highlighter by extension, treats a dotfile as having none, because by the splitext/extname rule it genuinely doesn't.",
+  "why": "splitext and extname both special-case a leading dot: they look for the LAST dot that is not the first character of the filename. That rule is exactly what correctly makes \"archive.tar.gz\" yield \".gz\" instead of treating the whole name as one giant extension, but the same rule means a name that starts with a dot and has no OTHER dot, like \".bashrc\", has nothing after any qualifying dot — Python returns (\".bashrc\", \"\") and Node returns the empty string.",
+  "affects": [
+    "python os.path.splitext",
+    "node path.extname"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "import os.path\nprint(os.path.splitext(\".bashrc\"))\n",
+      "expected_output": "('.bashrc', '')",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "import path from 'node:path';\nconsole.log(JSON.stringify(path.extname(\".bashrc\")));\n",
+      "expected_output": "\"\"",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Don't assume every file needs a non-empty extension to be valid; treat a leading-dot, no-further-dot name as a legitimate zero-extension dotfile rather than a malformed upload.",
+  "related": [
+    "extension-trap-double-extension"
+  ],
+  "sources": [
+    {
+      "title": "Python docs: os.path.splitext",
+      "url": "https://docs.python.org/3/library/os.path.html#os.path.splitext"
+    },
+    {
+      "title": "Node.js docs: path.extname",
+      "url": "https://nodejs.org/api/path.html#pathextnamepath"
+    }
+  ],
+  "tags": [
+    "filename",
+    "path",
+    "parsing",
+    "validation",
+    "upload"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        ".bashrc"
+      ],
+      "relation": "returns",
+      "expected": "",
+      "note": "Your extension-required upload filter needs to decide, deliberately, whether an extension-free dotfile is allowed."
+    }
+  ]
+}

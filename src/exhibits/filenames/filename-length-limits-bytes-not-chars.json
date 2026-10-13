@@ -1,0 +1,66 @@
+{
+  "id": "filename-length-limits-bytes-not-chars",
+  "title": "A 255-byte filename limit fits only 85 Chinese characters",
+  "category": "filenames",
+  "assumption": "A filename length limit measured in characters means you can always fit that many characters, in any script.",
+  "input": {
+    "display": "85 repetitions of U+6587 (文) vs 86 repetitions",
+    "description": "A user-supplied title or display name being used, unmodified, as a filename or as a path component in an export."
+  },
+  "what_goes_wrong": "A filename that looks well under a '255 character' budget by character count can already be AT or OVER the real filesystem limit, because most Linux filesystems enforce the limit in BYTES of the encoded name, and common CJK characters take 3 bytes each in UTF-8.",
+  "why": "ext4 and most other Linux filesystems cap a single path component at 255 bytes, not 255 Unicode code points. A Latin-script name is about one byte per character, so the limit feels like a character limit, but a common CJK character encodes to 3 bytes in UTF-8, so 85 of them consume all 255 bytes and the 86th pushes the name past the limit at a character count of only 86. Windows measures differently again: an NTFS name component is limited to 255 UTF-16 code units, and the Win32 API separately caps the whole path at MAX_PATH (260 characters) unless long-path support is enabled, so a limit tuned for one platform does not carry over to the other.",
+  "affects": [
+    "ext4 / most linux filesystems (255 bytes per component)",
+    "windows (255 utf-16 units per ntfs component; 260-character MAX_PATH for the whole path unless long paths are enabled)"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "s85 = \"\\u6587\" * 85\ns86 = \"\\u6587\" * 86\nprint(len(s85), len(s85.encode(\"utf-8\")))\nprint(len(s86), len(s86.encode(\"utf-8\")))\nprint(len(s86.encode(\"utf-8\")) > 255)\n",
+      "expected_output": "85 255\n86 258\nTrue",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "const s85 = \"\\u6587\".repeat(85);\nconst s86 = \"\\u6587\".repeat(86);\nconsole.log(s85.length, Buffer.byteLength(s85, \"utf8\"));\nconsole.log(s86.length, Buffer.byteLength(s86, \"utf8\"));\nconsole.log(Buffer.byteLength(s86, \"utf8\") > 255);\n",
+      "expected_output": "85 255\n86 258\ntrue",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "When checking a filename against a filesystem's length limit, measure the encoded byte length (UTF-8 for Linux) against that filesystem's actual limit, not the character or code-point count, and look up the right number for the right platform instead of reusing '255' everywhere.",
+  "related": [],
+  "sources": [
+    {
+      "title": "Linux kernel docs: ext4 directory entries (255-byte names)",
+      "url": "https://www.kernel.org/doc/html/latest/filesystems/ext4/directory.html"
+    },
+    {
+      "title": "Microsoft Learn: Maximum Path Length Limitation",
+      "url": "https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation"
+    }
+  ],
+  "tags": [
+    "filename",
+    "path",
+    "length validation",
+    "upload",
+    "i18n",
+    "validation"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文"
+      ],
+      "relation": "raises",
+      "note": "86 CJK characters is 258 UTF-8 bytes: a validator enforcing a 255-byte filename limit should reject this even though it is only 86 characters."
+    },
+    {
+      "inputs": [
+        "文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文"
+      ],
+      "relation": "no_crash",
+      "note": "85 of them is exactly 255 bytes and should be accepted."
+    }
+  ]
+}

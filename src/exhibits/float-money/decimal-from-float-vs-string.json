@@ -1,0 +1,66 @@
+{
+  "id": "decimal-from-float-vs-string",
+  "title": "Decimal(0.1) is not Decimal(\"0.1\") - switching to Decimal doesn't fix the bug if you build it from a float",
+  "category": "float-money",
+  "assumption": "Wrapping a problematic float in decimal.Decimal() makes it exact, regardless of how the Decimal was constructed.",
+  "input": {
+    "display": "decimal.Decimal(0.1) vs decimal.Decimal(\"0.1\")",
+    "description": "A developer who hits a float rounding bug in money code and \"fixes\" it by calling Decimal() on an existing float variable, instead of re-reading the original value as a string."
+  },
+  "what_goes_wrong": "`Decimal(0.1)` prints as `Decimal('0.1000000000000000055511151231257827021181583404541015625')` - Decimal faithfully captured the float's actual binary value, not the clean decimal 0.1 - while `Decimal(\"0.1\")` is exactly `Decimal('0.1')`. The two are unequal, so money code that parses a string to a float and only then wraps it in Decimal has already lost precision before Decimal ever runs.",
+  "why": "`decimal.Decimal` is exact in base 10, but it can only be as exact as the input it's given. Passed a `float`, the constructor reads out that float's true (imprecise) IEEE-754 double value in full and stores exactly that - it cannot recover the \"0.1\" a human typed, because by the time it's a float, that information is already gone. Passed a `str`, it parses the decimal digits directly with no binary detour, so it is exact. JavaScript has no built-in decimal type (TC39's Decimal proposal is not part of the language), but the JavaScript repro shows the same fact from the other side: the Number written as 0.1 holds exactly 0.1000000000000000055511151231257827021181583404541015625, so any decimal library constructed from that Number rather than from the string \"0.1\" starts from the wrong value.",
+  "affects": [
+    "python"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "from decimal import Decimal\na = Decimal(0.1)\nb = Decimal(\"0.1\")\nprint(a)\nprint(b)\nprint(a == b)\nprint(Decimal(0.1) + Decimal(0.2) == Decimal(\"0.3\"))\nprint(Decimal(\"0.1\") + Decimal(\"0.2\") == Decimal(\"0.3\"))\n",
+      "expected_output": "0.1000000000000000055511151231257827021181583404541015625\n0.1\nFalse\nFalse\nTrue",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "// No built-in Decimal, but toFixed can print the exact binary value a Number holds;\n// any decimal library constructed from this Number starts from that value, not \"0.1\".\nconst x = 0.1;\nconsole.log(String(x));\nconsole.log(x.toFixed(55));\nconsole.log((0.1 + 0.2).toFixed(55));\n",
+      "expected_output": "0.1\n0.1000000000000000055511151231257827021181583404541015625\n0.3000000000000000444089209850062616169452667236328125000",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Always construct Decimal (or any exact money type) from the original string the user typed or the database stored - never from a float that has already rounded the value. If a float is all you have, treat it as already-corrupted and document the tolerance you're accepting.",
+  "related": [
+    "float-anchor-0-1-plus-0-2",
+    "python-round-2-675-float-imprecision"
+  ],
+  "sources": [
+    {
+      "title": "Python docs: decimal - Decimal fixed point and floating point arithmetic",
+      "url": "https://docs.python.org/3/library/decimal.html"
+    },
+    {
+      "title": "Python docs: 15.1. Floating-Point Arithmetic: Issues and Limitations",
+      "url": "https://docs.python.org/3/tutorial/floatingpoint.html"
+    },
+    {
+      "title": "TC39 proposal: Decimal",
+      "url": "https://github.com/tc39/proposal-decimal"
+    }
+  ],
+  "tags": [
+    "money",
+    "currency",
+    "price",
+    "accounting",
+    "invoice",
+    "rounding"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "0.1",
+        0.1
+      ],
+      "relation": "no_crash",
+      "note": "A their_make_decimal(value) helper should document whether it accepts floats at all; if it does, Decimal(0.1) != Decimal(\"0.1\") must not be silently assumed equal downstream."
+    }
+  ]
+}

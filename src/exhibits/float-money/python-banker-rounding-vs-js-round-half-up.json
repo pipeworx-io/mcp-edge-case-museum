@@ -1,0 +1,65 @@
+{
+  "id": "python-banker-rounding-vs-js-round-half-up",
+  "title": "round(2.5) is 2 in Python but Math.round(2.5) is 3 in JavaScript",
+  "category": "float-money",
+  "assumption": "Rounding a value that is exactly halfway between two integers always rounds up, in every language.",
+  "input": {
+    "display": "round(2.5) in Python 3 vs Math.round(2.5) in JavaScript, and round(-2.5) vs Math.round(-2.5)",
+    "description": "A genuine tie - e.g. rounding a $2.50 half-unit quantity, or a tax amount that lands exactly on a half-cent after an earlier exact calculation - rounded to the nearest whole unit."
+  },
+  "what_goes_wrong": "The exact same halfway value rounds to a different integer depending on the language: Python's round(2.5) is 2 and round(3.5) is 4 (always to the nearest even integer), while JavaScript's Math.round(2.5) is 3 (always rounds .5 up, toward positive infinity) - and Math.round(-2.5) is -2, not -3, because \"up\" for Math.round means toward +Infinity even on the negative side.",
+  "why": "Python 3's round() implements round-half-to-even (\"banker's rounding\", IEEE 754's default rounding mode) specifically to avoid statistical bias from always rounding .5 the same direction over many values. JavaScript's Math.round() is specified (ECMA-262) to round half-way cases toward +Infinity, not away from zero and not to even - which is why -2.5 rounds to -2 (toward +Infinity means less negative) rather than -3. Neither behavior is a bug; they are different, deliberately documented rounding rules, and porting rounding logic between the two languages without accounting for the difference changes answers for every exact half.",
+  "affects": [
+    "python",
+    "javascript"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "print(round(2.5), round(3.5), round(-2.5), round(-3.5))\n",
+      "expected_output": "2 4 -2 -4",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "console.log(Math.round(2.5), Math.round(3.5), Math.round(-2.5), Math.round(-3.5));\n",
+      "expected_output": "3 4 -2 -3",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Decide and document one rounding rule for money (customer-facing amounts commonly use round-half-up, away from zero; some accounting contexts deliberately use half-even) and implement it explicitly - e.g. Python's decimal.Decimal.quantize(..., rounding=decimal.ROUND_HALF_UP) - rather than relying on whatever a language's built-in round happens to do.",
+  "related": [
+    "python-round-2-675-float-imprecision",
+    "decimal-from-float-vs-string"
+  ],
+  "sources": [
+    {
+      "title": "Python docs: round()",
+      "url": "https://docs.python.org/3/library/functions.html#round"
+    },
+    {
+      "title": "MDN: Math.round()",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/round"
+    },
+    {
+      "title": "ECMA-262: Math.round",
+      "url": "https://tc39.es/ecma262/#sec-math.round"
+    }
+  ],
+  "tags": [
+    "money",
+    "rounding",
+    "price",
+    "accounting",
+    "invoice"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        2.5
+      ],
+      "relation": "no_crash",
+      "note": "A cross-language rounding function should not assume their_function(2.5) gives the same result as Math.round(2.5) in JS (3) or round(2.5) in Python (2) by default - pick one explicit rule and implement it the same way everywhere."
+    }
+  ]
+}

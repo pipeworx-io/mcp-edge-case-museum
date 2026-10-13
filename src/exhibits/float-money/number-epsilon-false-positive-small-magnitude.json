@@ -1,0 +1,52 @@
+{
+  "id": "number-epsilon-false-positive-small-magnitude",
+  "title": "Number.EPSILON as a tolerance says 1e-20 and 2e-20 are equal, even though one is exactly double the other",
+  "category": "float-money",
+  "assumption": "Comparing `Math.abs(a - b) <= Number.EPSILON` is a safe, general-purpose \"close enough to be equal\" check for any two floating-point numbers.",
+  "input": {
+    "display": "Math.abs(1e-20 - 2e-20) <= Number.EPSILON",
+    "description": "A generic \"nearly equal\" helper copy-pasted into a pricing or rate-calculation codebase and applied to small fractional values (e.g. a per-unit rate, a tiny fee percentage, or a currency conversion remainder) as well as ordinary prices."
+  },
+  "what_goes_wrong": "`1e-20 !== 2e-20` correctly reports they're different numbers (one is literally double the other), but `Math.abs(1e-20 - 2e-20) <= Number.EPSILON` reports `true` - the \"nearly equal\" check says two values that differ by 100% of their own magnitude are equal.",
+  "why": "`Number.EPSILON` (about 2.22e-16) is the gap between 1 and the next representable double above it - it is an absolute tolerance calibrated for numbers near magnitude 1. For numbers much smaller than 1, that absolute tolerance is enormous relative to the values being compared, so genuinely different small numbers fall within it and are wrongly judged equal. (The mirror-image failure happens at large magnitudes: the gap between adjacent representable doubles grows past Number.EPSILON, so even values that are as close as floating point can represent are judged \"not equal\".) A tolerance has to scale with the magnitude of the numbers being compared - a fixed epsilon from the language's standard library does not do that for you.",
+  "affects": [
+    "javascript",
+    "python",
+    "any code using machine epsilon as an absolute tolerance"
+  ],
+  "repros": [
+    {
+      "language": "javascript",
+      "code": "const a = 1e-20;\nconst b = 2e-20;\nconsole.log(a === b);\nconsole.log(Math.abs(a - b), Number.EPSILON);\nconsole.log(Math.abs(a - b) <= Number.EPSILON);\n",
+      "expected_output": "false\n1e-20 2.220446049250313e-16\ntrue",
+      "verified_with": "Node.js v22.22.2"
+    },
+    {
+      "language": "python",
+      "code": "import sys\na = 1e-20\nb = 2e-20\nprint(a == b)\nprint(abs(a - b), sys.float_info.epsilon)\nprint(abs(a - b) <= sys.float_info.epsilon)\n",
+      "expected_output": "False\n1e-20 2.220446049250313e-16\nTrue",
+      "verified_with": "Python 3.14.2"
+    }
+  ],
+  "fix": "Use a tolerance that scales with the operands, e.g. `Math.abs(a - b) <= 1e-9 * Math.max(Math.abs(a), Math.abs(b))`, and add an absolute tolerance only if values near zero should count as equal in your domain. Python's `math.isclose(a, b)` does exactly this (relative `rel_tol=1e-09`, `abs_tol=0.0` by default) and returns False for 1e-20 vs 2e-20. Beware the common variant `Number.EPSILON * Math.max(|a|, |b|, 1)`: the `1` floor turns it back into an absolute EPSILON tolerance below magnitude 1, so it still calls 1e-20 and 2e-20 equal. For money, compare integer minor units instead of floats.",
+  "related": [
+    "float-anchor-0-1-plus-0-2"
+  ],
+  "sources": [
+    {
+      "title": "MDN: Number.EPSILON",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/EPSILON"
+    },
+    {
+      "title": "Python docs: sys.float_info",
+      "url": "https://docs.python.org/3/library/sys.html#sys.float_info"
+    }
+  ],
+  "tags": [
+    "money",
+    "price",
+    "comparison",
+    "validation",
+    "accounting"
+  ]
+}

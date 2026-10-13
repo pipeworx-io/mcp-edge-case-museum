@@ -1,0 +1,57 @@
+{
+  "id": "sort-by-surname-particle-convention-mismatch",
+  "title": "Sorting people by their stored surname puts \"van der Berg\" after \"de Vries\"; a Dutch phone book would put it before",
+  "category": "names-addresses",
+  "assumption": "Sorting a list of surnames alphabetically, exactly as the strings are stored, produces the one correct order.",
+  "input": {
+    "display": "[\"Bakker\", \"van der Berg\", \"de Vries\"]",
+    "description": "A directory, address book, or customer list sorted by a 'last name' field that stores the full surname including any leading particle."
+  },
+  "what_goes_wrong": "Sorting the raw strings files \"van der Berg\" under V, after \"de Vries\"; the Dutch convention drops a leading particle (van, der, de) when computing the sort key, filing \"van der Berg\" under B, ahead of \"de Vries\" under V. The two conventions put these two names in a different relative order.",
+  "why": "There is no single universal rule for sorting a surname with a leading particle. The Dutch convention, followed by Dutch directories and by library cataloging rules for Dutch names, drops the particle to compute the sort key; Belgian (Flemish) practice and many other systems keep it. A system that just lowercases and sorts the stored string whole keeps the particle in place. The conventions simply disagree, and most software picks the whole-string sort without ever deciding to.",
+  "affects": [
+    "any 'sort by last name' feature using the raw stored string",
+    "library/bibliographic cataloging convention for particles (documented, not universally applied by software)"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "people = [(\"Pieter\", \"Bakker\"), (\"Joost\", \"van der Berg\"), (\"Anna\", \"de Vries\")]\nnaive_order = sorted(people, key=lambda p: p[1].lower())\nprint([p[1] for p in naive_order])\n\nPARTICLES = {\"van\", \"der\", \"de\", \"von\", \"del\", \"la\"}\ndef catalog_key(surname):\n    words = surname.split(\" \")\n    while words and words[0].lower() in PARTICLES:\n        words.pop(0)\n    return \" \".join(words).lower()\n\ncatalog_order = sorted(people, key=lambda p: catalog_key(p[1]))\nprint([p[1] for p in catalog_order])\nprint(naive_order == catalog_order)\n",
+      "expected_output": "['Bakker', 'de Vries', 'van der Berg']\n['Bakker', 'van der Berg', 'de Vries']\nFalse",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "const people = [[\"Pieter\", \"Bakker\"], [\"Joost\", \"van der Berg\"], [\"Anna\", \"de Vries\"]];\nconst naiveOrder = [...people].sort((a, b) => a[1].toLowerCase().localeCompare(b[1].toLowerCase()));\nconsole.log(naiveOrder.map((p) => p[1]));\n\nconst PARTICLES = new Set([\"van\", \"der\", \"de\", \"von\", \"del\", \"la\"]);\nfunction catalogKey(surname) {\n  const words = surname.split(\" \");\n  while (words.length && PARTICLES.has(words[0].toLowerCase())) words.shift();\n  return words.join(\" \").toLowerCase();\n}\nconst catalogOrder = [...people].sort((a, b) => catalogKey(a[1]).localeCompare(catalogKey(b[1])));\nconsole.log(catalogOrder.map((p) => p[1]));\nconsole.log(JSON.stringify(naiveOrder) === JSON.stringify(catalogOrder));\n",
+      "expected_output": "[ 'Bakker', 'de Vries', 'van der Berg' ]\n[ 'Bakker', 'van der Berg', 'de Vries' ]\nfalse",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Pick a sort-key convention explicitly (whole string vs. particle-dropped) and apply it consistently, rather than sorting by whatever happens to be stored in the surname field, and don't assume there's one universally 'correct' convention; it varies by language and institution.",
+  "related": [
+    "split-surname-on-last-space-loses-particle"
+  ],
+  "sources": [
+    {
+      "title": "Patrick McKenzie: Falsehoods Programmers Believe About Names",
+      "url": "https://www.kalzumeus.com/2010/06/17/falsehoods-programmers-believe-about-names/"
+    }
+  ],
+  "tags": [
+    "names",
+    "sorting",
+    "display",
+    "i18n",
+    "database"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "van der Berg",
+        "de Vries"
+      ],
+      "relation": "no_crash",
+      "note": "Decide and document which sort-key convention your directory uses for particled surnames; the two common ones disagree."
+    }
+  ]
+}

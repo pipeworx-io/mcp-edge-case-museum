@@ -1,0 +1,60 @@
+{
+  "id": "title-case-mangles-mixed-case-and-apostrophes",
+  "title": "str.title() turns \"mcdonald\" into \"Mcdonald\" and \"they're\" into \"They'Re\"",
+  "category": "names-addresses",
+  "assumption": "A built-in title-case function always produces the conventionally correct capitalization of a name.",
+  "input": {
+    "display": "\"mcdonald\", \"they're\"",
+    "description": "A lowercase or all-caps name from a legacy database or a careless import, being 'fixed up' for display with a generic title-casing function."
+  },
+  "what_goes_wrong": "\"mcdonald\" displays as \"Mcdonald\" instead of \"McDonald\", and a word containing an apostrophe like \"they're\" gets a capital letter injected right after the apostrophe, becoming \"They'Re\".",
+  "why": "Python's str.title() capitalizes the first letter of every maximal run of alphabetic characters and lowercases the rest; it has no dictionary of surname conventions, so it has no way to know the 'D' in McDonald should also be capitalized, and it treats an apostrophe as a word boundary just like a space — which happens to look right for a name like \"o'neil\" but is wrong for a contraction like \"they're\", capitalizing the letter right after the apostrophe either way. The common hand-rolled JavaScript equivalent (capitalize the first character of each whitespace-separated token) fails differently: it also gives \"Mcdonald\", but treats \"o'neil\" as one token and returns \"O'neil\", missing the capital that name needs.",
+  "affects": [
+    "python str.title()"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "print(\"mcdonald\".title())\nprint(\"o'neil\".title())\nprint(\"they're\".title())\n",
+      "expected_output": "Mcdonald\nO'Neil\nThey'Re",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "function titleCase(s) {\n  return s.replace(/\\w\\S*/g, (t) => t[0].toUpperCase() + t.slice(1).toLowerCase());\n}\nconsole.log(titleCase(\"mcdonald\"));\nconsole.log(titleCase(\"o'neil\"));\n",
+      "expected_output": "Mcdonald\nO'neil",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Don't auto-capitalize a name with a generic title-casing function; either store and display the name exactly as the person entered it, or maintain an explicit exception list for known patterns (Mc/Mac, O', particles) and accept that no automatic rule covers every name.",
+  "related": [
+    "ascii-regex-rejects-accented-and-hyphenated-names"
+  ],
+  "sources": [
+    {
+      "title": "Python docs: str.title()",
+      "url": "https://docs.python.org/3/library/stdtypes.html#str.title"
+    },
+    {
+      "title": "Patrick McKenzie: Falsehoods Programmers Believe About Names",
+      "url": "https://www.kalzumeus.com/2010/06/17/falsehoods-programmers-believe-about-names/"
+    }
+  ],
+  "tags": [
+    "names",
+    "display",
+    "validation",
+    "forms",
+    "i18n"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "mcdonald"
+      ],
+      "relation": "returns",
+      "expected": "McDonald",
+      "note": "A generic title-case function will almost certainly fail this — decide whether you want to auto-capitalize names at all before relying on one."
+    }
+  ]
+}

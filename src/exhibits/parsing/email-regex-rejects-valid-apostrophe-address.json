@@ -1,0 +1,68 @@
+{
+  "id": "email-regex-rejects-valid-apostrophe-address",
+  "title": "A common signup-form email regex rejects o'brien@example.com but accepts user+tag@example.com",
+  "category": "parsing",
+  "assumption": "A regex like ^[\\w.+-]+@[\\w-]+\\.[a-zA-Z]{2,}$ is a reasonable, slightly-strict stand-in for \"is this a valid email address\".",
+  "input": {
+    "display": "o'brien@example.com",
+    "description": "A signup, checkout, or newsletter form's email field, validated client- or server-side with a hand-written regex, used by a person whose email address's local part (the part before @) contains a punctuation character the regex author didn't anticipate - most commonly an apostrophe in a surname."
+  },
+  "what_goes_wrong": "`/^[\\w.+-]+@[\\w-]+\\.[a-zA-Z]{2,}$/` rejects `o'brien@example.com` (valid, real-world mail address) while accepting `user+tag@example.com` (plus-addressing, also valid) - the regex's author remembered to allow `+` for Gmail-style tagging but not `'`, so a real customer's real address bounces at the form while a less common but equally valid syntax sails through.",
+  "why": "RFC 5322 section 3.2.3 defines the characters allowed in an unquoted local-part (`atext`) as letters, digits and `! # $ % & ' * + - / = ? ^ _ ` { | } ~`, so the apostrophe is exactly as legal as `+` (a dot is also allowed, but only between such characters). A regex built from `\\w` (letters, digits, underscore) plus a hand-picked handful of extras will inevitably miss some of that list, and the apostrophe is a costly one to miss because it appears in real surnames such as O'Brien and D'Angelo, so the regex rejects real customers rather than malformed input.",
+  "affects": [
+    "python",
+    "javascript",
+    "any email validator built from a hand-picked character class instead of RFC 5322's atext"
+  ],
+  "repros": [
+    {
+      "language": "javascript",
+      "code": "const common = /^[\\w.+-]+@[\\w-]+\\.[a-zA-Z]{2,}$/;\nconsole.log(common.test(\"obrien@example.com\"));\nconsole.log(common.test(\"o'brien@example.com\"));\nconsole.log(common.test(\"user+tag@example.com\"));\n",
+      "expected_output": "true\nfalse\ntrue",
+      "verified_with": "Node.js v22.22.2"
+    },
+    {
+      "language": "python",
+      "code": "import re\ncommon = re.compile(r\"^[\\w.+-]+@[\\w-]+\\.[a-zA-Z]{2,}$\")\nprint(bool(common.match(\"obrien@example.com\")))\nprint(bool(common.match(\"o'brien@example.com\")))\nprint(bool(common.match(\"user+tag@example.com\")))\n",
+      "expected_output": "True\nFalse\nTrue",
+      "verified_with": "Python 3.14.2"
+    }
+  ],
+  "fix": "Don't hand-roll an email-syntax regex. Validate only loosely for form UX (e.g. \"contains exactly one @, with non-whitespace on both sides\") and rely on the actual downstream proof that matters - whether sending a confirmation email to the address succeeds - rather than a regex meant to approximate RFC 5322's full grammar.",
+  "related": [],
+  "sources": [
+    {
+      "title": "RFC 5322: Internet Message Format, Section 3.2.3 (Atom / atext)",
+      "url": "https://www.rfc-editor.org/rfc/rfc5322#section-3.2.3"
+    },
+    {
+      "title": "RFC 5321: Simple Mail Transfer Protocol, Section 4.1.2 (Mailbox local-part)",
+      "url": "https://www.rfc-editor.org/rfc/rfc5321#section-4.1.2"
+    }
+  ],
+  "tags": [
+    "email",
+    "validation",
+    "forms",
+    "parsing",
+    "names"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "o'brien@example.com"
+      ],
+      "relation": "returns",
+      "expected": true,
+      "note": "their_is_valid_email(address) should accept this RFC-5322-legal address rather than rejecting it for containing an apostrophe."
+    },
+    {
+      "inputs": [
+        "user+tag@example.com"
+      ],
+      "relation": "returns",
+      "expected": true,
+      "note": "Plus-addressing is also legal atext and should be accepted."
+    }
+  ]
+}

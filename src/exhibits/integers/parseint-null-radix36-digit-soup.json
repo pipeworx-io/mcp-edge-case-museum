@@ -1,0 +1,57 @@
+{
+  "id": "parseint-null-radix36-digit-soup",
+  "title": "parseInt(null, 36) returns 1112745",
+  "category": "integers",
+  "assumption": "Passing null where a string is expected is harmless, or at worst gives you 0 or NaN.",
+  "input": {
+    "display": "parseInt(null, 36) === 1112745",
+    "description": "A missing or unset form field, config value, or optional function argument that falls through to `parseInt` without a guard, combined with a non-default radix such as base36 (used for compact id encoding)."
+  },
+  "what_goes_wrong": "A missing value that should produce 0, NaN, or an error instead silently produces a real-looking, nonzero integer -- 1112745 -- which can pass a `typeof x === 'number' && !isNaN(x)` guard and flow deep into the system before anyone notices the input was never actually a number.",
+  "why": "`parseInt`'s first argument is coerced to a string before parsing, and `String(null)` is the literal string `\"null\"`. In base 36, digits run 0-9 then a-z representing 10-35, so every character of \"null\" (n, u, l, l) is a valid base-36 digit, and the whole string parses successfully as a number -- specifically 1112745. Nothing about this path raises an error or returns NaN, because from `parseInt`'s point of view it was simply handed a valid base-36 numeral.",
+  "affects": [
+    "javascript"
+  ],
+  "repros": [
+    {
+      "language": "javascript",
+      "code": "console.log(String(null));\nconsole.log(parseInt(null, 36));\nconsole.log(parseInt(\"null\", 36));\nconsole.log(parseInt(undefined, 36)); // String(undefined) === 'undefined', also all valid base-36 digits\n",
+      "expected_output": "null\n1112745\n1112745\n86464843759093",
+      "verified_with": "Node.js v22.22.2"
+    },
+    {
+      "language": "python",
+      "code": "# Python's int() with an explicit base requires an actual string and rejects None outright.\ntry:\n    int(None, 36)\nexcept TypeError as e:\n    print(\"TypeError:\", e)\n",
+      "expected_output": "TypeError: int() can't convert non-string with explicit base",
+      "verified_with": "Python 3.14.2"
+    }
+  ],
+  "fix": "Guard against `null`/`undefined` before calling `parseInt` rather than relying on it to fail loudly; it won't, for any radix where the stringified sentinel's letters happen to be valid digits.",
+  "related": [
+    "parseint-stops-at-first-invalid-char-vs-number"
+  ],
+  "sources": [
+    {
+      "title": "MDN: parseInt()",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/parseInt"
+    },
+    {
+      "title": "ECMA-262: parseInt (string coercion of the first argument)",
+      "url": "https://tc39.es/ecma262/#sec-parseint-string-radix"
+    }
+  ],
+  "tags": [
+    "parsing",
+    "validation",
+    "forms"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        null
+      ],
+      "relation": "no_crash",
+      "note": "A function wrapping parseInt with a non-10 radix should explicitly reject null/undefined rather than let String() coercion through."
+    }
+  ]
+}

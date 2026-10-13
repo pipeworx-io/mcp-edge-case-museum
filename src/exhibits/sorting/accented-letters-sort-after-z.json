@@ -1,0 +1,63 @@
+{
+  "id": "accented-letters-sort-after-z",
+  "title": "\"äpple\" sorts after \"zebra\" with a default sort",
+  "category": "sorting",
+  "assumption": "An accented letter sorts next to its unaccented counterpart — \"äpple\" belongs near \"apple\", not off at the end of the alphabet.",
+  "input": {
+    "display": "[\"zebra\", \"äpple\", \"apple\"]",
+    "description": "A product or name list containing a word with a diacritic, sorted with the default (non-locale-aware) string comparison."
+  },
+  "what_goes_wrong": "The default sort returns [\"apple\", \"zebra\", \"äpple\"] — \"äpple\" lands after \"zebra\", not next to \"apple\" where a human alphabetizing by the base letter would put it.",
+  "why": "\"ä\" is U+00E4, a higher value than \"z\" (U+007A): the Latin-1 Supplement block, where most Western European accented letters live, comes entirely after the ASCII lowercase letters. Python's default string comparison orders by code point and JavaScript's by UTF-16 code unit (the same thing for these characters), so neither knows that \"ä\" is a variant of \"a\" in most European alphabets. Only a locale-aware collator knows that relationship.",
+  "affects": [
+    "python",
+    "javascript"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "words = [\"zebra\", \"\\u00e4pple\", \"apple\"]\nprint(sorted(words))\n",
+      "expected_output": "['apple', 'zebra', 'äpple']",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "const words = [\"zebra\", \"\\u00e4pple\", \"apple\"];\nconsole.log(words.slice().sort());\nconsole.log(words.slice().sort((a, b) => a.localeCompare(b)));\n",
+      "expected_output": "[ 'apple', 'zebra', 'äpple' ]\n[ 'apple', 'äpple', 'zebra' ]",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Use a locale-aware comparator for any text a human will read: Intl.Collator or String.prototype.localeCompare() in JavaScript. Python's standard library has no built-in Unicode collation; it requires either the system locale module (environment-dependent) or a third-party ICU binding.",
+  "related": [
+    "byte-order-caps-before-lowercase",
+    "locale-collation-de-vs-sv"
+  ],
+  "sources": [
+    {
+      "title": "Unicode Standard Annex #10: Unicode Collation Algorithm",
+      "url": "https://www.unicode.org/reports/tr10/"
+    },
+    {
+      "title": "MDN: String.prototype.localeCompare()",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/localeCompare"
+    }
+  ],
+  "tags": [
+    "sorting",
+    "comparison",
+    "names",
+    "i18n",
+    "display"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "zebra",
+        "äpple"
+      ],
+      "relation": "returns",
+      "expected": false,
+      "note": "their_function(a, b) as a human-order \"a sorts before b\" test should return false: äpple belongs before zebra. Raw `a < b` returns true here, which is the trap."
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "id": "grapheme-vs-codepoint-length",
+  "title": "One family emoji, three different \"lengths\": 1, 5, and 8",
+  "category": "unicode",
+  "assumption": "A string's length property tells you how many characters a person sees on screen.",
+  "input": {
+    "display": "\"\\u{1F468}\\u200D\\u{1F469}\\u200D\\u{1F467}\" (man + ZWJ + woman + ZWJ + girl = one family emoji)",
+    "description": "Any emoji picker's \"family\"/\"couple with heart\"/skin-tone-modified emoji, typed into a bio, nickname, or chat message with a character-count limit."
+  },
+  "what_goes_wrong": "The single glyph a user sees as ONE character reports length 8 in JavaScript's .length, 5 via JavaScript's [...s].length or Python's len(), and 1 via JavaScript's Intl.Segmenter grapheme count. A \"max 10 characters\" bio limit enforced with .length rejects two family emoji (16 code units) that the user sees as two characters, and truncating by any of the non-grapheme measures can cut the glyph apart (see the truncation exhibits).",
+  "why": "JavaScript strings are sequences of UTF-16 code units, and .length counts those units; each of the three emoji here is outside the Basic Multilingual Plane, so it needs a surrogate pair (2 code units), giving 3×2 + 2 ZWJ = 8. Python strings are sequences of Unicode code points, and len() counts those; the same string is 3 emoji + 2 ZWJ = 5 code points (the spread operator [...s] in JavaScript iterates by code point too, also giving 5). But a person perceives the whole ZWJ-joined sequence as a single \"grapheme cluster\" — exactly one visual unit — which is what JavaScript's Intl.Segmenter({granularity: \"grapheme\"}) counts, and what Python's standard library has no built-in equivalent for.",
+  "affects": [
+    "python",
+    "javascript"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "s = \"\\U0001F468\\u200D\\U0001F469\\u200D\\U0001F467\"\nprint(len(s))\n",
+      "expected_output": "5",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "const s = \"\\u{1F468}\\u200D\\u{1F469}\\u200D\\u{1F467}\";\nconsole.log(s.length);\nconsole.log([...s].length);\nconst seg = new Intl.Segmenter(\"en\", { granularity: \"grapheme\" });\nconsole.log([...seg.segment(s)].length);\n",
+      "expected_output": "8\n5\n1",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Enforce user-facing length limits with a grapheme-cluster counter, not raw .length/len(). In JavaScript use Intl.Segmenter (built in, no dependency); Python's standard library has no grapheme-cluster segmenter, so either accept code-point length as an approximation (it undercounts far less often than UTF-16 length) or add a UAX #29-compliant library.",
+  "related": [
+    "truncation-splits-surrogate-pair",
+    "zalgo-combining-mark-stacking"
+  ],
+  "sources": [
+    {
+      "title": "Unicode Standard Annex #29: Unicode Text Segmentation (grapheme clusters)",
+      "url": "https://www.unicode.org/reports/tr29/"
+    },
+    {
+      "title": "MDN: Intl.Segmenter",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/Segmenter"
+    },
+    {
+      "title": "Unicode Emoji ZWJ Sequences",
+      "url": "https://www.unicode.org/Public/emoji/latest/emoji-zwj-sequences.txt"
+    }
+  ],
+  "tags": [
+    "length validation",
+    "forms",
+    "display",
+    "truncation",
+    "i18n",
+    "validation"
+  ]
+}

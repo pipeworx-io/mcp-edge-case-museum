@@ -1,0 +1,59 @@
+{
+  "id": "nan-in-sort",
+  "title": "One NaN can leave the rest of the list unsorted",
+  "category": "sorting",
+  "assumption": "A NaN in a numeric list just ends up somewhere predictable, and every other value still gets sorted.",
+  "input": {
+    "display": "sorted([1, 2, 3, nan]), sorted([nan, 1, 2, 3]) and sorted([3, nan, 1])",
+    "description": "A numeric column (a score, a computed ratio, a percentage with a 0/0 somewhere) that can legitimately contain NaN, sorted for a leaderboard or report."
+  },
+  "what_goes_wrong": "Where NaN lands depends on where it started ([1, 2, 3, nan] stays as is, [nan, 1, 2, 3] stays as is), and worse, sorted([3, nan, 1]) returns [3, nan, 1]: the numbers 3 and 1 are left out of order. JavaScript's sort with (a, b) => a - b returned [3, NaN, 1] for the same input in Node.js.",
+  "why": "IEEE 754 makes every ordered comparison with NaN false, so to Python's sort NaN looks equal to everything (neither NaN < x nor x < NaN). In JavaScript, a - b is NaN whenever either side is NaN, and the spec turns a NaN comparator result into 0, which also means \"equal\". Equality with everything breaks transitivity: 3 \"equals\" NaN and NaN \"equals\" 1, but 3 is not equal to 1. Sorting algorithms rely on transitivity to avoid comparing every pair, so they can conclude [3, nan, 1] is already in order. Python's sort makes no promise for inconsistent comparisons, and the ECMAScript spec says the order is implementation-defined when the comparator is not consistent.",
+  "affects": [
+    "python",
+    "javascript"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "nan = float(\"nan\")\nprint(sorted([1, 2, 3, nan]))\nprint(sorted([nan, 1, 2, 3]))\nprint(sorted([3, nan, 1]))\n",
+      "expected_output": "[1, 2, 3, nan]\n[nan, 1, 2, 3]\n[3, nan, 1]",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "const byNum = (a, b) => a - b;\nconsole.log([3, 1, NaN, 2].sort(byNum));\nconsole.log([NaN, 3, 1, 2].sort(byNum));\nconsole.log([3, NaN, 1].sort(byNum));\n",
+      "expected_output": "[ 1, 2, 3, NaN ]\n[ NaN, 1, 2, 3 ]\n[ 3, NaN, 1 ]",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Remove or partition NaN before sorting rather than letting it reach the comparison. Decide whether NaN goes first, last, or is excluded, and encode that directly: in Python, key=lambda x: (math.isnan(x), x) puts NaN last; in JavaScript, a comparator that checks Number.isNaN() on both sides before subtracting.",
+  "related": [
+    "comparator-returns-boolean-js"
+  ],
+  "sources": [
+    {
+      "title": "Python docs: Sorting Techniques",
+      "url": "https://docs.python.org/3/howto/sorting.html"
+    },
+    {
+      "title": "Python docs: math.isnan",
+      "url": "https://docs.python.org/3/library/math.html#math.isnan"
+    },
+    {
+      "title": "ECMAScript spec: SortIndexedProperties (implementation-defined order for inconsistent comparators)",
+      "url": "https://tc39.es/ecma262/#sec-sortindexedproperties"
+    },
+    {
+      "title": "ECMAScript spec: CompareArrayElements (NaN result treated as +0)",
+      "url": "https://tc39.es/ecma262/#sec-comparearrayelements"
+    }
+  ],
+  "tags": [
+    "sorting",
+    "comparison",
+    "display",
+    "pagination"
+  ],
+  "test_cases": null
+}

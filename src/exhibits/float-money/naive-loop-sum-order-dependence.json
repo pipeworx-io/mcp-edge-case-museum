@@ -1,0 +1,71 @@
+{
+  "id": "naive-loop-sum-order-dependence",
+  "title": "The same three numbers sum to 0.0 or 1.0 depending only on the order you add them in",
+  "category": "float-money",
+  "assumption": "Addition is associative, so summing a list of amounts gives the same total no matter what order you add them in.",
+  "input": {
+    "display": "a loop totaling [1e16, 1.0, -1e16] vs the same three values reordered to [1e16, -1e16, 1.0]",
+    "description": "Totaling line items where one amount is vastly larger than another (a huge negotiated credit alongside a one-dollar fee, or a running grand-total accumulator next to a small adjustment), accumulated one at a time with `total += amount`."
+  },
+  "what_goes_wrong": "A hand-written accumulator totals [1e16, 1.0, -1e16] as 0.0 but totals the reordered [1e16, -1e16, 1.0] as 1.0 - the mathematically identical sum of the same three numbers, in a different order, gives a different floating-point answer.",
+  "why": "Adding 1.0 to 1e16 first has no effect at all: doubles near 1e16 are spaced 2 apart, so 1e16 + 1.0 lands exactly halfway between 1e16 and 1e16 + 2, and IEEE-754's round-half-to-even rule picks 1e16. The 1.0 is rounded away before the later subtraction of 1e16 ever sees it, leaving 0.0. Doing the subtraction first (1e16 - 1e16 = 0.0 exactly) leaves the 1.0 intact to be added last, giving 1.0. Floating-point addition is commutative but not associative, because each intermediate result is independently rounded. Python's `math.fsum` tracks the lost low-order bits and returns the exactly rounded 1.0 for both orderings (since Python 3.12 the built-in `sum()` also gives 1.0 here, via compensated summation); Node 22 has no standard-library equivalent (`Math.sumPrecise` is a TC39 proposal it does not ship).",
+  "affects": [
+    "python",
+    "javascript",
+    "any naive left-to-right float accumulation"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "import math\n\ndef naive_sum(xs):\n    total = 0.0\n    for x in xs:\n        total += x\n    return total\n\na = [1e16, 1.0, -1e16]\nb = [1e16, -1e16, 1.0]\nprint(naive_sum(a), naive_sum(b))\nprint(math.fsum(a), math.fsum(b))\n",
+      "expected_output": "0.0 1.0\n1.0 1.0",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "function naiveSum(xs) { return xs.reduce((a, b) => a + b, 0); }\nconst a = [1e16, 1.0, -1e16];\nconst b = [1e16, -1e16, 1.0];\nconsole.log(naiveSum(a), naiveSum(b));\n",
+      "expected_output": "0 1",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Don't assume reordering a sum is safe once magnitudes differ wildly. In Python, use `math.fsum()` for an exactly rounded, order-independent total. In JavaScript (Node 22) there is no built-in - use a compensated-summation (Kahan/Neumaier) helper, or (best for money) work in integer minor units, which have no rounding error to begin with as long as totals stay below 2**53.",
+  "related": [
+    "sum-ten-dimes-not-a-dollar",
+    "float-anchor-0-1-plus-0-2"
+  ],
+  "sources": [
+    {
+      "title": "Python docs: math.fsum()",
+      "url": "https://docs.python.org/3/library/math.html#math.fsum"
+    },
+    {
+      "title": "What Every Computer Scientist Should Know About Floating-Point Arithmetic (Goldberg, hosted by Oracle)",
+      "url": "https://docs.oracle.com/cd/E19957-01/806-3568/ncg_goldberg.html"
+    }
+  ],
+  "tags": [
+    "money",
+    "accounting",
+    "invoice",
+    "price",
+    "rounding"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        [
+          1e+16,
+          1.0,
+          -1e+16
+        ],
+        [
+          1e+16,
+          -1e+16,
+          1.0
+        ]
+      ],
+      "relation": "equal",
+      "note": "their_sum(list) should give the same total for both orderings of these three numbers (1.0 is the mathematically correct answer for both) - a naive left-to-right accumulator gives 0.0 for the first and 1.0 for the second."
+    }
+  ]
+}

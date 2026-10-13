@@ -1,0 +1,63 @@
+{
+  "id": "tofixed-1-005-rounds-down-not-up",
+  "title": "(1.005).toFixed(2) is \"1.00\", not \"1.01\"",
+  "category": "float-money",
+  "assumption": "toFixed(2) rounds a price to the nearest cent using ordinary round-half-up rules.",
+  "input": {
+    "display": "(1.005).toFixed(2)",
+    "description": "Rounding a computed price like $1.005 (e.g. a $1 item with a 0.5% fee) to two decimal places for display or for a ledger entry."
+  },
+  "what_goes_wrong": "`(1.005).toFixed(2)` returns the string \"1.00\" - the price appears to round down even though 1.005 is exactly halfway between 1.00 and 1.01.",
+  "why": "The literal 1.005 cannot be represented exactly in IEEE-754 double; the nearest representable double is approximately 1.00499999999999989341..., which is already below 1.005. `toFixed` rounds that true underlying value, not the digits you typed, so it correctly rounds 1.00499999... down to \"1.00\". The bug isn't in toFixed's rounding rule - it's that the number was never exactly 1.005 to begin with.",
+  "affects": [
+    "javascript",
+    "any IEEE-754 double formatted by rounding its true binary value"
+  ],
+  "repros": [
+    {
+      "language": "javascript",
+      "code": "console.log((1.005).toFixed(2));\nconsole.log((1.005).toFixed(20));\n",
+      "expected_output": "1.00\n1.00499999999999989342",
+      "verified_with": "Node.js v22.22.2"
+    },
+    {
+      "language": "python",
+      "code": "x = 1.005\nprint(f\"{x:.2f}\")\nprint(f\"{x:.20f}\")\n",
+      "expected_output": "1.00\n1.00499999999999989342",
+      "verified_with": "Python 3.14.2"
+    }
+  ],
+  "fix": "Don't round a float's decimal string representation and expect it to match the decimal literal you wrote. Work in integer minor units (round the amount to cents as an integer before any division back to dollars) or use a Decimal type constructed from a string, not a float literal.",
+  "related": [
+    "tofixed-2-345-inconsistent-rounding",
+    "python-round-2-675-float-imprecision",
+    "decimal-from-float-vs-string"
+  ],
+  "sources": [
+    {
+      "title": "ECMA-262: Number.prototype.toFixed",
+      "url": "https://tc39.es/ecma262/#sec-number.prototype.tofixed"
+    },
+    {
+      "title": "Python docs: 15.1. Floating-Point Arithmetic: Issues and Limitations",
+      "url": "https://docs.python.org/3/tutorial/floatingpoint.html"
+    }
+  ],
+  "tags": [
+    "money",
+    "rounding",
+    "price",
+    "currency",
+    "invoice",
+    "display"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        1.005
+      ],
+      "relation": "no_crash",
+      "note": "A price-rounding function should not assume their_function(1.005) == 1.01 by formatting the float's decimal digits; it should round an exact (integer-cents or Decimal) representation."
+    }
+  ]
+}

@@ -1,0 +1,68 @@
+{
+  "id": "nfc-nfd-filename-lookup-mismatch",
+  "title": "Two filenames that look identical can be different byte strings, and a Linux server will store both",
+  "category": "filenames",
+  "assumption": "A filename that looks the same on screen is the same filename on disk.",
+  "input": {
+    "display": "\"caf\\u00e9.txt\" encoded as NFC (\\u00e9) vs the same visible name encoded as NFD (e + \\u0301)",
+    "description": "A filename that arrives in decomposed form (for example, a file that originated on an older Mac HFS+ volume, which stored names in a variant of NFD, or a client that decomposes text) stored verbatim on a Linux server, then looked up by the composed form a different client produced."
+  },
+  "what_goes_wrong": "A byte-exact filename search for the composed form finds nothing, even though a file with the 'same' visible name exists on disk, because the stored bytes are the decomposed form.",
+  "why": "NFC and NFD are both valid Unicode encodings of identical visible text, but they are different code-point sequences and therefore different UTF-8 bytes. Linux filesystems like ext4 treat names as opaque bytes with no normalization, so the two forms are two unrelated names: a lookup by one misses the other, and both can coexist in one directory. Mac filesystems behave differently: HFS+ stored names in a variant of NFD, while APFS preserves whichever form it was given but matches names normalization-insensitively, so the same lookup that succeeds on a Mac fails once the file is on a Linux server.",
+  "affects": [
+    "ext4 / most linux filesystems (byte-wise names, no normalization)",
+    "macos hfs+ (stores a variant of nfd)",
+    "macos apfs (preserves the given form, normalization-insensitive lookup)",
+    "any client/server pair that disagrees on normalization form"
+  ],
+  "repros": [
+    {
+      "language": "python",
+      "code": "import unicodedata\nnfc = unicodedata.normalize(\"NFC\", \"caf\\u00e9.txt\")\nnfd = unicodedata.normalize(\"NFD\", \"caf\\u00e9.txt\")\nprint(nfc == nfd, len(nfc), len(nfd))\nprint(nfc.encode(\"utf-8\") == nfd.encode(\"utf-8\"), len(nfc.encode(\"utf-8\")), len(nfd.encode(\"utf-8\")))\n",
+      "expected_output": "False 8 9\nFalse 9 10",
+      "verified_with": "Python 3.14.2"
+    },
+    {
+      "language": "javascript",
+      "code": "const nfc = \"caf\\u00e9.txt\".normalize(\"NFC\");\nconst nfd = \"caf\\u00e9.txt\".normalize(\"NFD\");\nconsole.log(nfc === nfd, nfc.length, nfd.length);\nconsole.log(Buffer.from(nfc, \"utf8\").equals(Buffer.from(nfd, \"utf8\")), Buffer.byteLength(nfc), Buffer.byteLength(nfd));\n",
+      "expected_output": "false 8 9\nfalse 9 10",
+      "verified_with": "Node.js v22.22.2"
+    }
+  ],
+  "fix": "Normalize every filename to one form (NFC is the usual choice) at the point it enters your system, before it ever reaches a save or a lookup, so client and server always agree on the byte sequence.",
+  "related": [
+    "nfc-nfd-same-name-two-accounts"
+  ],
+  "sources": [
+    {
+      "title": "Unicode Standard Annex #15: Unicode Normalization Forms",
+      "url": "https://www.unicode.org/reports/tr15/"
+    },
+    {
+      "title": "Apple Technical Q&A QA1173: Text Encodings in VFS (HFS+ decomposed names)",
+      "url": "https://developer.apple.com/library/archive/qa/qa1173/_index.html"
+    },
+    {
+      "title": "Apple File System Guide: FAQ (APFS normalization and case sensitivity)",
+      "url": "https://developer.apple.com/library/archive/documentation/FileManagement/Conceptual/APFS_Guide/FAQ/FAQ.html"
+    }
+  ],
+  "tags": [
+    "filename",
+    "path",
+    "normalization",
+    "upload",
+    "i18n",
+    "unicode"
+  ],
+  "test_cases": [
+    {
+      "inputs": [
+        "café.txt",
+        "café.txt"
+      ],
+      "relation": "equal",
+      "note": "A filename-key function should normalize (usually to NFC) so the composed and decomposed spellings map to the same key."
+    }
+  ]
+}
