@@ -1,6 +1,6 @@
 {
   "name": "@pipeworx/mcp-edge-case-museum",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Edge Case Museum MCP — 'Your code works. Except for these wonderfully terrible inputs.'",
   "type": "module",
   "main": "src/index.ts",
@@ -26,7 +26,7 @@
     "@cloudflare/workers-types": "^4.20260405.1"
   },
   "pipeworx": {
-    "sourceHash": "v1-10cd61b84316a80bf1d45baad819d000aed625f48f8934603cc3acef8addf1f6",
-    "sourceCommit": "3723e46c6d115bd4a1fd2175e6bf758555e7cb50"
+    "sourceHash": "v1-3081b54dc5f3854258063da594df22057720b4c6b7031476727e233a9e85981d",
+    "sourceCommit": "29b0ba434db72d3275d2ef85fdacb3db32377ba7"
   }
 }

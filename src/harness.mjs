@@ -33,7 +33,7 @@
  *   node src/harness.mjs --dir <path>    exhibits root (default: the pack's src/exhibits)
  *   node src/harness.mjs --no-write      do not touch verified.json (used by the red-path test)
  */
-import { readFileSync, writeFileSync, readdirSync, statSync, mkdtempSync, mkdirSync, rmSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync, statSync, mkdtempSync, mkdirSync, rmSync, existsSync, realpathSync } from 'node:fs';
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import os from 'node:os';
@@ -316,7 +316,16 @@ export async function runHarness({ dir = DIR, capture = CAPTURE, recapture = REC
   return { ok, passed, failed, problems, failures, exhibits: loaded.length, byCat };
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+// realpath on both sides: through a symlinked path (macOS /tmp -> /private/tmp) a plain
+// path.resolve comparison never matched, so the harness ran NOTHING and exited 0 -- green unrun.
+const isMain = () => {
+  try {
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+};
+if (process.argv[1] && isMain()) {
   const r = await runHarness();
   process.exit(r.ok ? 0 : 1);
 }
