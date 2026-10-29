@@ -3,7 +3,7 @@
   "name": "io.github.pipeworx-io/edge-case-museum",
   "title": "Edge Case Museum",
   "description": "Edge Case Museum MCP — 'Your code works. Except for these wonderfully terrible inputs.'",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "websiteUrl": "https://pipeworx.io/packs/edge-case-museum",
   "repository": {
     "url": "https://github.com/pipeworx-io/mcp-edge-case-museum",
